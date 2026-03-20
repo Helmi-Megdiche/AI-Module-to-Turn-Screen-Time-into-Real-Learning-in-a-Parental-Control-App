@@ -227,6 +227,18 @@
     }
     ul.history li:last-child { border-bottom: none; }
     .muted { color: var(--muted); font-size: 0.8rem; }
+    .metric-main {
+      display: block;
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-top: 0.2rem;
+    }
+    .metric-sub {
+      display: block;
+      margin-top: 0.2rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
   </style>
 </head>
 <body>
@@ -318,7 +330,7 @@
         <div class="grid-2">
           <div class="card"><strong>Points</strong><br /><span id="sumPoints">—</span></div>
           <div class="card"><strong>Missions (count)</strong><br /><span id="sumMissions">—</span></div>
-          <div class="card"><strong>Average risk</strong><br /><span id="sumAvg">—</span></div>
+          <div class="card"><strong>Average risk</strong><br /><span id="sumAvg" class="metric-main">—</span><span id="sumAvgRaw" class="metric-sub">Raw score: —</span></div>
           <div class="card"><strong>Dangerous analyses</strong><br /><span id="sumDanger">—</span></div>
         </div>
       </div>
@@ -427,6 +439,14 @@
       p.setAttribute("aria-hidden", show ? "false" : "true");
     }
 
+    function formatPercent(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return "—";
+      const pct = n <= 1 ? n * 100 : n;
+      const digits = pct < 10 ? 1 : 0;
+      return pct.toFixed(digits) + "%";
+    }
+
     /** Avoid res.json() on HTML error pages (wrong URL, payload too large, etc.) */
     async function readJsonSafe(res) {
       const text = await res.text();
@@ -521,10 +541,13 @@
         const s = data.summary || {};
         $("sumPoints").textContent = s.points != null ? s.points : "—";
         $("sumMissions").textContent = s.totalMissions != null ? s.totalMissions : "—";
-        $("sumAvg").textContent =
-          s.averageRiskScore != null && s.averageRiskScore !== ""
-            ? s.averageRiskScore
-            : "—";
+        if (s.averageRiskScore != null && s.averageRiskScore !== "") {
+          $("sumAvg").textContent = formatPercent(s.averageRiskScore);
+          $("sumAvgRaw").textContent = "Raw score: " + s.averageRiskScore;
+        } else {
+          $("sumAvg").textContent = "—";
+          $("sumAvgRaw").textContent = "Raw score: —";
+        }
         $("sumDanger").textContent = s.dangerousCount != null ? s.dangerousCount : "—";
         $("summaryOut").hidden = false;
       } catch (e) {
