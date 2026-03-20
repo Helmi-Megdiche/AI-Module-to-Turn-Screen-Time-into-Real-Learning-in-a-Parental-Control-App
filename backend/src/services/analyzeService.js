@@ -1,0 +1,108 @@
+const prisma = require('../config/prisma');
+const aiService = require('./aiService');
+
+const SIMULATED_AI = {
+  text: 'sample extracted text',
+  riskScore: 0.6,
+  category: 'risky',
+};
+
+function hasProvidedImage(image) {
+  return typeof image === 'string' && image.trim().length > 0;
+}
+
+function isValidAiResponse(data) {
+  if (!data || typeof data !== 'object') return false;
+  if (typeof data.text !== 'string') return false;
+  if (typeof data.category !== 'string') return false;
+  const r = Number(data.riskScore);
+  if (!Number.isFinite(r)) return false;
+  return true;
+}
+
+function normalizeAiResponse(data) {
+  return {
+    text: data.text,
+    riskScore: Number(data.riskScore),
+    category: data.category,
+  };
+}
+
+async function resolveAnalysisPayload(image) {
+  if (!hasProvidedImage(image)) {
+    return { ...SIMULATED_AI, usedAI: false };
+  }
+
+  let raw;
+  try {
+    raw = await aiService.analyzeImage(image.trim());
+  } catch {
+    throw new Error('AI analysis failed');
+  }
+
+  if (!isValidAiResponse(raw)) {
+    throw new Error('AI analysis failed');
+  }
+
+  return { ...normalizeAiResponse(raw), usedAI: true };
+}
+
+function missionForRiskScore(riskScore) {
+  if (riskScore < 0.3) {
+    return { mission: 'Continue your activity responsibly', points: 2 };
+  }
+  if (riskScore <= 0.7) {
+    return { mission: 'Take a 10-minute break', points: 5 };
+  }
+  return { mission: 'Go outside for 20 minutes', points: 10 };
+}
+
+async function runAnalyze({ userId, age, image }) {
+  const { text, riskScore, category, usedAI } = await resolveAnalysisPayload(image);
+  const { mission, points } = missionForRiskScore(riskScore);
+
+  return prisma.$transaction(async (tx) => {
+    let user = await tx.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      user = await tx.user.create({
+        data: {
+          id: userId,
+          age,
+          points: 0,
+        },
+      });
+    }
+
+    const analysis = await tx.analysis.create({
+      data: {
+        userId: user.id,
+        text,
+        riskScore,
+        category,
+        usedAI,
+      },
+    });
+
+    console.log(`[ANALYSIS] User ${userId} - Risk processed`);
+
+    const missionRecord = await tx.mission.create({
+      data: {
+        userId: user.id,
+        mission,
+        points,
+      },
+    });
+
+    const userUpdated = await tx.user.update({
+      where: { id: user.id },
+      data: {
+        points: { increment: points },
+      },
+    });
+
+    return { analysis, mission: missionRecord, user: userUpdated };
+  });
+}
+
+module.exports = { runAnalyze };

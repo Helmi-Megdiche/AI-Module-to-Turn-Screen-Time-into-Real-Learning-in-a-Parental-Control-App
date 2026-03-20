@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int        @id @default(autoincrement())
+  age       Int
+  points    Int        @default(0)
+  createdAt DateTime   @default(now())
+  analyses  Analysis[]
+  missions  Mission[]
+}
+
+model Analysis {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  text      String
+  riskScore Float
+  category  String
+  usedAI    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Mission {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  mission   String
+  points    Int
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
