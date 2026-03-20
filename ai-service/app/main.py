@@ -11,12 +11,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.services import ocr_service
-from app.services.risk_scoring import (
-    build_display_text,
-    category_from_score,
-    compute_risk_score,
-    matched_keywords,
-)
+from app.services.risk_scoring import analyze_text, category_from_score
 from app.utils.image_utils import base64_to_pil
 
 logging.basicConfig(level=logging.INFO)
@@ -81,13 +76,14 @@ async def analyze(body: AnalyzeRequest):
         raise HTTPException(status_code=500, detail=f"OCR processing failed: {e}") from e
 
     raw = text or ""
-    matches = matched_keywords(raw)
-    risk_score = compute_risk_score(len(matches))
+    analysis = analyze_text(raw)
+    matches = analysis.matched_keywords
+    risk_score = analysis.risk_score
     category = category_from_score(risk_score)
 
     return AnalyzeResponse(
         text=raw,
-        displayText=build_display_text(raw),
+        displayText=analysis.display_text,
         matchedKeywords=matches,
         riskScore=risk_score,
         category=category,

@@ -1,15 +1,119 @@
-"""Keyword-based risk score and category (no ML classifier — keeps the demo predictable)."""
+"""Context-aware risk scoring that stays deterministic for the demo."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+import math
 import re
 
-# Lists from product spec — tune these if parents want stricter/looser rules
-VIOLENCE = ["kill", "fight", "blood", "attack"]
-TOXIC = ["hate", "stupid", "idiot", "loser"]
-DANGEROUS = ["challenge", "jump", "fire", "knife"]
 
-ALL_KEYWORDS = VIOLENCE + TOXIC + DANGEROUS
+@dataclass(frozen=True)
+class SignalRule:
+    label: str
+    weight: float
+    aliases: tuple[str, ...] = ()
+    context: tuple[str, ...] = ()
+    patterns: tuple[str, ...] = ()
+    window: int = 3
+
+
+@dataclass(frozen=True)
+class RiskAnalysis:
+    matched_keywords: list[str]
+    risk_score: float
+    display_text: str
+
+
+SIGNAL_RULES: tuple[SignalRule, ...] = (
+    SignalRule(
+        label="self-harm",
+        weight=1.2,
+        patterns=(
+            r"\bkill\s+yourself\b",
+            r"\bhurt\s+yourself\b",
+            r"\bcut\s+yourself\b",
+            r"\bend\s+your\s+life\b",
+            r"\bsuicide\b",
+            r"\bself[\s-]*harm\b",
+        ),
+    ),
+    SignalRule(
+        label="violent threat",
+        weight=0.95,
+        aliases=("kill", "stab", "shoot", "attack", "beat"),
+        context=("you", "him", "her", "them", "teacher", "kid", "child", "mom", "dad"),
+        patterns=(
+            r"\bi(?:'ll| will| am going to|m gonna)?\s+(?:kill|stab|shoot)\s+(?:you|him|her|them)\b",
+            r"\b(?:kill|stab|shoot)\s+(?:you|him|her|them)\b",
+            r"\bbeat\s+(?:you|him|her|them)\b",
+        ),
+    ),
+    SignalRule(
+        label="weapon",
+        weight=0.55,
+        aliases=("knife", "gun", "pistol", "rifle", "bullet", "weapon"),
+    ),
+    SignalRule(
+        label="dangerous jump",
+        weight=0.75,
+        aliases=("jump", "climb"),
+        context=("roof", "bridge", "window", "balcony", "building", "ledge", "high", "train", "moving"),
+        patterns=(
+            r"\bjump\s+off\b",
+            r"\bclimb\s+(?:onto|up)\b",
+        ),
+    ),
+    SignalRule(
+        label="dangerous fire",
+        weight=0.6,
+        aliases=("fire", "burn", "lighter", "gasoline", "petrol"),
+        context=("set", "house", "room", "bed", "school", "inside", "challenge", "spray", "bottle"),
+        patterns=(
+            r"\bset\s+(?:it|this|the\s+\w+)?\s*on\s+fire\b",
+            r"\bplay(?:ing)?\s+with\s+fire\b",
+            r"\bburn\s+(?:the|my|your|his|her)\b",
+        ),
+    ),
+    SignalRule(
+        label="poison or overdose",
+        weight=0.85,
+        aliases=("bleach", "poison", "overdose", "pill", "pills"),
+        patterns=(
+            r"\bdrink\s+bleach\b",
+            r"\btake\s+\d+\s+pills?\b",
+            r"\boverdose\b",
+        ),
+    ),
+    SignalRule(
+        label="dangerous challenge",
+        weight=0.65,
+        aliases=("challenge", "trend"),
+        context=("knife", "fire", "burn", "jump", "balcony", "roof", "bleach", "choke", "pills", "overdose", "train"),
+        patterns=(
+            r"\b(?:tiktok|viral)\s+challenge\b",
+        ),
+    ),
+    SignalRule(
+        label="violent injury",
+        weight=0.45,
+        aliases=("blood", "bleeding", "fight"),
+        patterns=(
+            r"\bbeat\s+up\b",
+            r"\bfight(?:ing)?\b",
+        ),
+    ),
+    SignalRule(
+        label="toxic abuse",
+        weight=0.25,
+        aliases=("hate", "stupid", "idiot", "loser", "worthless"),
+    ),
+)
+
+ALL_KEYWORDS = [
+    alias
+    for rule in SIGNAL_RULES
+    for alias in rule.aliases
+]
 
 
 def _levenshtein(a: str, b: str) -> int:
@@ -31,9 +135,9 @@ def _levenshtein(a: str, b: str) -> int:
 
 
 def _max_edits_allowed(keyword: str) -> int:
-    """OCR often swaps 1–2 characters on short words (e.g. loser → leser)."""
+    """Allow OCR fuzziness, but stay strict on very short words to avoid false positives."""
     n = len(keyword)
-    if n <= 3:
+    if n <= 4:
         return 0
     if n <= 6:
         return 1
@@ -44,47 +148,79 @@ def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", text.lower())
 
 
-def _keyword_hit_in_text(lowered: str, kw: str) -> bool:
-    if kw in lowered:
+def _token_matches_keyword(token_lower: str, kw: str) -> bool:
+    if token_lower == kw:
         return True
 
     max_ed = _max_edits_allowed(kw)
-    if max_ed == 0:
+    if max_ed == 0 or abs(len(token_lower) - len(kw)) > max_ed:
         return False
+    return _levenshtein(token_lower, kw) <= max_ed
 
-    for token in _tokens(lowered):
-        if abs(len(token) - len(kw)) > max_ed:
-            continue
-        if _levenshtein(token, kw) <= max_ed:
-            return True
+
+def _keyword_hit_in_text(lowered: str, kw: str) -> bool:
+    if kw in lowered:
+        return True
+    return any(_token_matches_keyword(token, kw) for token in _tokens(lowered))
+
+
+def _match_indexes(tokens: list[str], candidates: tuple[str, ...]) -> list[int]:
+    if not candidates:
+        return []
+    out: list[int] = []
+    for i, token in enumerate(tokens):
+        if any(_token_matches_keyword(token, candidate) for candidate in candidates):
+            out.append(i)
+    return out
+
+
+def _has_context_nearby(tokens: list[str], anchors: tuple[str, ...], context: tuple[str, ...], window: int) -> bool:
+    anchor_indexes = _match_indexes(tokens, anchors)
+    if not anchor_indexes:
+        return False
+    context_indexes = _match_indexes(tokens, context)
+    if not context_indexes:
+        return False
+    return any(abs(a - c) <= window for a in anchor_indexes for c in context_indexes)
+
+
+def _rule_matches(lowered: str, tokens: list[str], rule: SignalRule) -> bool:
+    if any(re.search(pattern, lowered) for pattern in rule.patterns):
+        return True
+    if rule.aliases and not rule.context and _match_indexes(tokens, rule.aliases):
+        return True
+    if rule.aliases and rule.context and _has_context_nearby(tokens, rule.aliases, rule.context, rule.window):
+        return True
     return False
 
 
 def _canonical_for_token(token_lower: str) -> str | None:
     """Map one OCR token to the canonical list word we matched (first list hit wins)."""
     for kw in ALL_KEYWORDS:
-        if token_lower == kw:
-            return kw
-        max_ed = _max_edits_allowed(kw)
-        if max_ed == 0:
-            continue
-        if abs(len(token_lower) - len(kw)) > max_ed:
-            continue
-        if _levenshtein(token_lower, kw) <= max_ed:
+        if _token_matches_keyword(token_lower, kw):
             return kw
     return None
 
 
-def matched_keywords(text: str) -> list[str]:
-    """Canonical keywords that fired (substring or fuzzy), stable order as in ALL_KEYWORDS."""
+def analyze_text(text: str) -> RiskAnalysis:
     if not text or not text.strip():
-        return []
+        return RiskAnalysis(matched_keywords=[], risk_score=0.0, display_text="")
+
     lowered = text.lower()
-    out: list[str] = []
-    for kw in ALL_KEYWORDS:
-        if _keyword_hit_in_text(lowered, kw):
-            out.append(kw)
-    return out
+    tokens = _tokens(lowered)
+    matches = [rule.label for rule in SIGNAL_RULES if _rule_matches(lowered, tokens, rule)]
+    weights = [rule.weight for rule in SIGNAL_RULES if rule.label in matches]
+    risk_score = compute_risk_score(weights, matches)
+    return RiskAnalysis(
+        matched_keywords=matches,
+        risk_score=risk_score,
+        display_text=build_display_text(text),
+    )
+
+
+def matched_keywords(text: str) -> list[str]:
+    """Matched risk signals in stable order, not just isolated words."""
+    return analyze_text(text).matched_keywords
 
 
 def build_display_text(raw: str) -> str:
@@ -115,11 +251,28 @@ def count_keyword_hits(text: str) -> int:
     return len(matched_keywords(text))
 
 
-def compute_risk_score(match_count: int) -> float:
-    """Map hit count to [0, 1]. Four distinct hits already maxes out — keeps single-word screens meaningful."""
-    if match_count <= 0:
+def compute_risk_score(weights: list[float], labels: list[str] | None = None) -> float:
+    """
+    Turn weighted signals into a bounded score.
+
+    We use a smooth curve so one minor insult stays low, while multiple severe
+    signals rapidly approach the dangerous range.
+    """
+    if not weights:
         return 0.0
-    return min(1.0, match_count * 0.25)
+
+    raw_score = sum(weights)
+    score = 1 - math.exp(-raw_score)
+
+    labels = labels or []
+    if "dangerous challenge" in labels and any(
+        label in labels for label in ("weapon", "dangerous fire", "dangerous jump", "poison or overdose")
+    ):
+        score += 0.12
+    if "violent threat" in labels and "weapon" in labels:
+        score += 0.08
+
+    return round(min(1.0, score), 2)
 
 
 def category_from_score(risk_score: float) -> str:
