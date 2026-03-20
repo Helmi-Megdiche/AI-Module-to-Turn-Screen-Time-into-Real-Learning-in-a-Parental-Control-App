@@ -1,5 +1,5 @@
 """
-FastAPI entrypoint for screenshot OCR + moderation-based risk scoring.
+FastAPI entrypoint for screenshot OCR + keyword risk scoring.
 Matches the Node backend contract: POST /analyze { "image": "<base64>" }.
 """
 
@@ -10,9 +10,8 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.services.moderation_service import analyze_text, get_config as get_moderation_config
 from app.services import ocr_service
-from app.services.risk_scoring import category_from_score
+from app.services.risk_scoring import analyze_text, category_from_score
 from app.utils.image_utils import base64_to_pil
 
 logging.basicConfig(level=logging.INFO)
@@ -93,9 +92,4 @@ async def analyze(body: AnalyzeRequest):
 
 @app.get("/health")
 async def health():
-    moderation = get_moderation_config()
-    return {
-        "status": "ok",
-        "moderationProvider": "openai" if moderation.enabled else "local-fallback",
-        "moderationModel": moderation.model,
-    }
+    return {"status": "ok"}
