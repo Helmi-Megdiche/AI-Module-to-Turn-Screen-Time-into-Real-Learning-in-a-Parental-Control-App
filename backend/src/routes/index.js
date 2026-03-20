@@ -1,10 +1,12 @@
 const express = require('express');
 const healthRoutes = require('./healthRoutes');
 const analyzeRoutes = require('./analyzeRoutes');
+const userRoutes = require('./userRoutes');
 
 const router = express.Router();
 
 router.use('/health', healthRoutes);
 router.use('/analyze', analyzeRoutes);
+router.use('/user', userRoutes);
 
 module.exports = router;

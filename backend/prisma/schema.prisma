@@ -17,14 +17,16 @@ model User {
 }
 
 model Analysis {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  text      String
-  riskScore Float
-  category  String
-  usedAI    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               Int      @id @default(autoincrement())
+  userId           Int
+  text             String
+  displayText      String?
+  matchedKeywords  Json?
+  riskScore        Float
+  category         String
+  usedAI           Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Mission {

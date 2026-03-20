@@ -21,16 +21,31 @@ function isValidAiResponse(data) {
 }
 
 function normalizeAiResponse(data) {
+  const text = data.text;
+  const riskScore = Number(data.riskScore);
+  const category = data.category;
+  const displayText =
+    typeof data.displayText === 'string' ? data.displayText : text;
+  const matchedKeywords = Array.isArray(data.matchedKeywords)
+    ? data.matchedKeywords.filter((x) => typeof x === 'string')
+    : [];
   return {
-    text: data.text,
-    riskScore: Number(data.riskScore),
-    category: data.category,
+    text,
+    riskScore,
+    category,
+    displayText,
+    matchedKeywords,
   };
 }
 
 async function resolveAnalysisPayload(image) {
   if (!hasProvidedImage(image)) {
-    return { ...SIMULATED_AI, usedAI: false };
+    return {
+      ...SIMULATED_AI,
+      usedAI: false,
+      displayText: SIMULATED_AI.text,
+      matchedKeywords: [],
+    };
   }
 
   let raw;
@@ -58,7 +73,8 @@ function missionForRiskScore(riskScore) {
 }
 
 async function runAnalyze({ userId, age, image }) {
-  const { text, riskScore, category, usedAI } = await resolveAnalysisPayload(image);
+  const { text, riskScore, category, usedAI, displayText, matchedKeywords } =
+    await resolveAnalysisPayload(image);
   const { mission, points } = missionForRiskScore(riskScore);
 
   return prisma.$transaction(async (tx) => {
@@ -78,6 +94,8 @@ async function runAnalyze({ userId, age, image }) {
       data: {
         userId: user.id,
         text,
+        displayText,
+        matchedKeywords,
         riskScore,
         category,
         usedAI,
