@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PFE Demo — Parental Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f1412;
+      --surface: #1a221e;
+      --border: #2d3d36;
+      --text: #e8f0eb;
+      --muted: #8fa89a;
+      --accent: #3ecf8e;
+      --warn: #e8b84a;
+      --danger: #f07178;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "DM Sans", system-ui, sans-serif;
+      background: radial-gradient(1200px 600px at 10% -10%, #1a2c24 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #152028 0%, transparent 50%),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+    header {
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.25rem;
+    }
+    h1 {
+      font-family: "Fraunces", Georgia, serif;
+      font-weight: 700;
+      font-size: 1.75rem;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.35rem;
+    }
+    .tagline { color: var(--muted); font-size: 0.95rem; }
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.35rem;
+      margin-bottom: 1.25rem;
+    }
+    h2 {
+      font-family: "Fraunces", Georgia, serif;
+      font-size: 1.15rem;
+      margin: 0 0 1rem;
+      color: var(--accent);
+    }
+    label {
+      display: block;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="url"] {
+      width: 100%;
+      padding: 0.55rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #121a16;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    button {
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      padding: 0.6rem 1rem;
+      font-size: 0.9rem;
+      background: linear-gradient(180deg, #4ae89a 0%, var(--accent) 100%);
+      color: #062015;
+    }
+    button:hover { filter: brightness(1.06); }
+    button.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    button.secondary:hover { border-color: var(--accent); color: var(--accent); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+    .hint { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
+    pre, .card {
+      background: #121a16;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+      font-size: 0.82rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .err { color: var(--danger); font-size: 0.9rem; margin-top: 0.75rem; }
+    .ok { color: var(--accent); font-size: 0.85rem; margin-top: 0.5rem; }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+    .pill {
+      display: inline-block;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .pill.safe { background: #1e3d2e; color: var(--accent); }
+    .pill.risky { background: #3d3518; color: var(--warn); }
+    .pill.dangerous { background: #3d1e22; color: var(--danger); }
+    ul.history {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    ul.history li {
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 0;
+      font-size: 0.88rem;
+    }
+    ul.history li:last-child { border-bottom: none; }
+    .muted { color: var(--muted); font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Parental control — jury demo</h1>
+      <p class="tagline">Analyze · missions · history · summary (calls your real API)</p>
+    </header>
+
+    <section>
+      <h2>Connection</h2>
+      <div class="row">
+        <div>
+          <label for="apiBase">API base URL</label>
+          <input id="apiBase" type="url" value="http://localhost:3000" />
+        </div>
+        <div>
+          <label for="userId">User ID</label>
+          <input id="userId" type="number" min="1" value="1" />
+        </div>
+        <div>
+          <label for="age">Child age</label>
+          <input id="age" type="number" min="0" value="12" />
+        </div>
+      </div>
+      <p class="hint">Start the backend (<code>npm run dev</code> in <code>backend/</code>). API URL must be <strong>:3000</strong> (not the demo page port). Large <strong>JPG</strong> files need a bigger JSON limit — backend uses <strong>15MB</strong>. For real OCR, run the AI service on port 8000.</p>
+    </section>
+
+    <section>
+      <h2>1 · Analyze</h2>
+      <p class="muted" style="margin-top:0">Send a screenshot as base64. Leave empty to use the <strong>simulation</strong> path (no AI).</p>
+      <div style="margin:1rem 0">
+        <label for="file">Image file (optional)</label>
+        <input id="file" type="file" accept="image/*" />
+      </div>
+      <div class="actions">
+        <button type="button" id="btnAnalyze">Run analyze</button>
+        <button type="button" class="secondary" id="btnClearImage">Clear image</button>
+      </div>
+      <div id="analyzeErr" class="err" hidden></div>
+      <div id="analyzeOut" style="margin-top:1rem" hidden>
+        <div class="grid-2">
+          <div>
+            <label>Category</label>
+            <p id="outCategory"></p>
+          </div>
+          <div>
+            <label>Risk score</label>
+            <p id="outRisk"></p>
+          </div>
+        </div>
+        <label style="margin-top:0.75rem">Text (stored)</label>
+        <pre id="outText"></pre>
+        <label>Display / explainability</label>
+        <pre id="outDisplay"></pre>
+        <label>Mission</label>
+        <pre id="outMission"></pre>
+        <label>Raw JSON</label>
+        <pre id="outRaw"></pre>
+      </div>
+    </section>
+
+    <section>
+      <h2>2 · Summary</h2>
+      <div class="actions">
+        <button type="button" class="secondary" id="btnSummary">Load summary</button>
+      </div>
+      <div id="summaryErr" class="err" hidden></div>
+      <div id="summaryOut" style="margin-top:1rem" hidden>
+        <div class="grid-2">
+          <div class="card"><strong>Points</strong><br /><span id="sumPoints">—</span></div>
+          <div class="card"><strong>Missions (count)</strong><br /><span id="sumMissions">—</span></div>
+          <div class="card"><strong>Average risk</strong><br /><span id="sumAvg">—</span></div>
+          <div class="card"><strong>Dangerous analyses</strong><br /><span id="sumDanger">—</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>3 · History</h2>
+      <div class="actions">
+        <button type="button" class="secondary" id="btnHistory">Load history</button>
+      </div>
+      <div id="historyErr" class="err" hidden></div>
+      <div id="historyOut" style="margin-top:1rem" hidden>
+        <p class="muted" id="histPage"></p>
+        <h3 style="font-size:0.95rem;margin:1rem 0 0.5rem;color:var(--muted)">Analyses</h3>
+        <ul class="history" id="listAnalyses"></ul>
+        <h3 style="font-size:0.95rem;margin:1rem 0 0.5rem;color:var(--muted)">Missions</h3>
+        <ul class="history" id="listMissions"></ul>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function apiBase() {
+      return $("apiBase").value.replace(/\/$/, "");
+    }
+    function uid() {
+      return parseInt($("userId").value, 10);
+    }
+    function ageVal() {
+      return parseInt($("age").value, 10);
+    }
+
+    let imageB64 = null;
+
+    $("file").addEventListener("change", async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) {
+        imageB64 = null;
+        return;
+      }
+      const buf = await f.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      imageB64 = btoa(binary);
+    });
+
+    $("btnClearImage").addEventListener("click", () => {
+      $("file").value = "";
+      imageB64 = null;
+    });
+
+    function showErr(el, msg) {
+      if (!msg) {
+        el.hidden = true;
+        el.textContent = "";
+        return;
+      }
+      el.hidden = false;
+      el.textContent = msg;
+    }
+
+    /** Avoid res.json() on HTML error pages (wrong URL, payload too large, etc.) */
+    async function readJsonSafe(res) {
+      const text = await res.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        const isHtml = /^\s*</.test(text);
+        const hint = isHtml
+          ? " Server returned HTML — check API URL is http://localhost:3000 (not the demo port), and restart the backend after updating body size limit."
+          : "";
+        throw new Error(
+          "Response is not JSON (HTTP " + res.status + ")." + hint + " Snippet: " + text.slice(0, 180).replace(/\s+/g, " ")
+        );
+      }
+    }
+
+    function categoryPill(cat) {
+      const c = (cat || "").toLowerCase();
+      if (c === "safe") return '<span class="pill safe">safe</span>';
+      if (c === "risky") return '<span class="pill risky">risky</span>';
+      if (c === "dangerous") return '<span class="pill dangerous">dangerous</span>';
+      return String(cat);
+    }
+
+    $("btnAnalyze").addEventListener("click", async () => {
+      showErr($("analyzeErr"), "");
+      $("analyzeOut").hidden = true;
+
+      const body = {
+        userId: uid(),
+        age: ageVal(),
+      };
+      if (imageB64) body.image = imageB64;
+
+      try {
+        const res = await fetch(apiBase() + "/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await readJsonSafe(res);
+        if (!res.ok) {
+          showErr($("analyzeErr"), data.message || res.statusText);
+          return;
+        }
+        const a = data.analysis || {};
+        $("outCategory").innerHTML = categoryPill(a.category);
+        $("outRisk").textContent = a.riskScore != null ? String(a.riskScore) : "—";
+        $("outText").textContent = a.text != null ? a.text : "—";
+        const disp =
+          a.displayText != null
+            ? "displayText: " + a.displayText + "\nmatchedKeywords: " + JSON.stringify(a.matchedKeywords ?? [])
+            : "(no explainability columns — run a new analyze after migration)";
+        $("outDisplay").textContent = disp;
+        $("outMission").textContent = JSON.stringify(data.mission, null, 2);
+        $("outRaw").textContent = JSON.stringify(data, null, 2);
+        $("analyzeOut").hidden = false;
+      } catch (e) {
+        showErr($("analyzeErr"), e.message || String(e));
+      }
+    });
+
+    $("btnSummary").addEventListener("click", async () => {
+      showErr($("summaryErr"), "");
+      $("summaryOut").hidden = true;
+      try {
+        const res = await fetch(apiBase() + "/api/user/" + uid() + "/summary");
+        const data = await readJsonSafe(res);
+        if (!res.ok) {
+          showErr($("summaryErr"), data.message || res.statusText);
+          return;
+        }
+        const s = data.summary || {};
+        $("sumPoints").textContent = s.points != null ? s.points : "—";
+        $("sumMissions").textContent = s.totalMissions != null ? s.totalMissions : "—";
+        $("sumAvg").textContent =
+          s.averageRiskScore != null && s.averageRiskScore !== ""
+            ? s.averageRiskScore
+            : "—";
+        $("sumDanger").textContent = s.dangerousCount != null ? s.dangerousCount : "—";
+        $("summaryOut").hidden = false;
+      } catch (e) {
+        showErr($("summaryErr"), e.message || String(e));
+      }
+    });
+
+    $("btnHistory").addEventListener("click", async () => {
+      showErr($("historyErr"), "");
+      $("historyOut").hidden = true;
+      try {
+        const res = await fetch(apiBase() + "/api/user/" + uid() + "/history?take=20&skip=0");
+        const data = await readJsonSafe(res);
+        if (!res.ok) {
+          showErr($("historyErr"), data.message || res.statusText);
+          return;
+        }
+        const p = data.pagination || {};
+        $("histPage").textContent =
+          "Pagination: skip=" + (p.skip ?? 0) + ", take=" + (p.take ?? 20);
+
+        const la = $("listAnalyses");
+        la.innerHTML = "";
+        (data.analyses || []).forEach((row) => {
+          const li = document.createElement("li");
+          const dk =
+            row.displayText != null
+              ? row.displayText
+              : row.text;
+          const mk = row.matchedKeywords != null ? JSON.stringify(row.matchedKeywords) : "[]";
+          li.innerHTML =
+            "<strong>#" +
+            row.id +
+            "</strong> · " +
+            categoryPill(row.category) +
+            " · risk " +
+            row.riskScore +
+            "<br /><span class=\"muted\">" +
+            new Date(row.createdAt).toLocaleString() +
+            "</span><br />Text: " +
+            escapeHtml(String(row.text || "")) +
+            "<br />Explain: " +
+            escapeHtml(String(dk)) +
+            " · keywords: " +
+            escapeHtml(mk);
+          la.appendChild(li);
+        });
+
+        const lm = $("listMissions");
+        lm.innerHTML = "";
+        (data.missions || []).forEach((row) => {
+          const li = document.createElement("li");
+          li.innerHTML =
+            "<strong>#" +
+            row.id +
+            "</strong> · " +
+            escapeHtml(row.mission) +
+            " · +" +
+            row.points +
+            " pts · " +
+            row.status +
+            "<br /><span class=\"muted\">" +
+            new Date(row.createdAt).toLocaleString() +
+            "</span>";
+          lm.appendChild(li);
+        });
+
+        $("historyOut").hidden = false;
+      } catch (e) {
+        showErr($("historyErr"), e.message || String(e));
+      }
+    });
+
+    function escapeHtml(s) {
+      return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+  </script>
+</body>
+</html>
