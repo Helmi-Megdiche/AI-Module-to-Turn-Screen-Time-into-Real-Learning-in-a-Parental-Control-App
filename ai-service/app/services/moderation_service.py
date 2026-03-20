@@ -7,6 +7,7 @@ import json
 import logging
 import math
 import os
+from pathlib import Path
 from typing import Any
 from urllib import error, request
 
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 OPENAI_MODERATION_URL = "https://api.openai.com/v1/moderations"
 DEFAULT_MODEL = "omni-moderation-latest"
+ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 
 # Heavier weights for immediately dangerous content.
 CATEGORY_WEIGHTS: dict[str, float] = {
@@ -58,9 +60,29 @@ class ModerationConfig:
     enabled: bool
 
 
+def _read_env_file_value(name: str) -> str | None:
+    if not ENV_PATH.exists():
+        return None
+
+    prefix = f"{name}="
+    for raw_line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or not line.startswith(prefix):
+            continue
+        value = line[len(prefix) :].strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        return value or None
+    return None
+
+
 def get_config() -> ModerationConfig:
-    api_key = os.getenv("OPENAI_API_KEY")
-    model = os.getenv("OPENAI_MODERATION_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    api_key = os.getenv("OPENAI_API_KEY") or _read_env_file_value("OPENAI_API_KEY")
+    model = (
+        os.getenv("OPENAI_MODERATION_MODEL")
+        or _read_env_file_value("OPENAI_MODERATION_MODEL")
+        or DEFAULT_MODEL
+    ).strip() or DEFAULT_MODEL
     return ModerationConfig(api_key=api_key, model=model, enabled=bool(api_key))
 
 
