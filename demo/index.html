@@ -96,19 +96,93 @@
       cursor: pointer;
       border: none;
       border-radius: 8px;
-      padding: 0.6rem 1rem;
+      padding: 0.6rem 1.1rem;
+      min-height: 2.5rem;
       font-size: 0.9rem;
       background: linear-gradient(180deg, #4ae89a 0%, var(--accent) 100%);
       color: #062015;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: filter 0.15s ease, transform 0.08s ease, box-shadow 0.15s ease;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.25);
     }
-    button:hover { filter: brightness(1.06); }
+    button:hover:not(:disabled) { filter: brightness(1.06); }
+    button:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
+    button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
     button.secondary {
       background: var(--surface);
       color: var(--text);
       border: 1px solid var(--border);
+      box-shadow: none;
     }
-    button.secondary:hover { border-color: var(--accent); color: var(--accent); }
-    button:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+    button.secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); filter: none; }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      filter: grayscale(0.15);
+      transform: none;
+      box-shadow: none;
+    }
+    button.is-loading {
+      pointer-events: none;
+      opacity: 0.85;
+    }
+    .btn-spinner {
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid rgba(6, 32, 21, 0.25);
+      border-top-color: #062015;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+      flex-shrink: 0;
+    }
+    button.secondary .btn-spinner {
+      border-color: rgba(142, 168, 154, 0.35);
+      border-top-color: var(--accent);
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .load-panel {
+      margin-top: 1rem;
+      padding: 0.85rem 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #121a16;
+      display: none;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+    .load-panel[aria-hidden="false"] { display: flex; }
+    .load-panel .load-spinner {
+      width: 1.25rem;
+      height: 1.25rem;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+      margin-top: 0.15rem;
+    }
+    .load-panel strong { display: block; font-size: 0.9rem; margin-bottom: 0.2rem; }
+    .load-panel .elapsed { font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 600; }
+    .load-panel p { margin: 0; font-size: 0.82rem; color: var(--muted); line-height: 1.45; }
+    .load-panel.load-compact {
+      padding: 0.6rem 0.85rem;
+      align-items: center;
+    }
+    .load-panel.load-compact .load-spinner {
+      width: 1rem;
+      height: 1rem;
+      margin-top: 0;
+    }
+    .load-panel.load-compact strong { margin-bottom: 0; font-size: 0.85rem; }
+    button .btn-spinner { display: none; }
+    button.is-loading .btn-spinner { display: block; }
+    button.is-loading { min-width: 9rem; }
     .actions { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
     .hint { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
     pre, .card {
@@ -189,8 +263,18 @@
         <input id="file" type="file" accept="image/*" />
       </div>
       <div class="actions">
-        <button type="button" id="btnAnalyze">Run analyze</button>
+        <button type="button" id="btnAnalyze">
+          <span class="btn-label">Run analyze</span>
+          <span class="btn-spinner" hidden aria-hidden="true"></span>
+        </button>
         <button type="button" class="secondary" id="btnClearImage">Clear image</button>
+      </div>
+      <div id="analyzeLoad" class="load-panel" role="status" aria-live="polite" aria-hidden="true">
+        <div class="load-spinner" aria-hidden="true"></div>
+        <div>
+          <strong>Running analysis… <span class="elapsed" id="analyzeElapsed">0s</span></strong>
+          <p id="analyzeLoadHint">Sending request to the API.</p>
+        </div>
       </div>
       <div id="analyzeErr" class="err" hidden></div>
       <div id="analyzeOut" style="margin-top:1rem" hidden>
@@ -218,7 +302,16 @@
     <section>
       <h2>2 · Summary</h2>
       <div class="actions">
-        <button type="button" class="secondary" id="btnSummary">Load summary</button>
+        <button type="button" class="secondary" id="btnSummary">
+          <span class="btn-label">Load summary</span>
+          <span class="btn-spinner" hidden aria-hidden="true"></span>
+        </button>
+      </div>
+      <div id="summaryLoad" class="load-panel load-compact" role="status" aria-live="polite" aria-hidden="true">
+        <div class="load-spinner" aria-hidden="true"></div>
+        <div>
+          <strong>Loading summary… <span class="elapsed" id="summaryElapsed">0s</span></strong>
+        </div>
       </div>
       <div id="summaryErr" class="err" hidden></div>
       <div id="summaryOut" style="margin-top:1rem" hidden>
@@ -234,7 +327,16 @@
     <section>
       <h2>3 · History</h2>
       <div class="actions">
-        <button type="button" class="secondary" id="btnHistory">Load history</button>
+        <button type="button" class="secondary" id="btnHistory">
+          <span class="btn-label">Load history</span>
+          <span class="btn-spinner" hidden aria-hidden="true"></span>
+        </button>
+      </div>
+      <div id="historyLoad" class="load-panel load-compact" role="status" aria-live="polite" aria-hidden="true">
+        <div class="load-spinner" aria-hidden="true"></div>
+        <div>
+          <strong>Loading history… <span class="elapsed" id="historyElapsed">0s</span></strong>
+        </div>
       </div>
       <div id="historyErr" class="err" hidden></div>
       <div id="historyOut" style="margin-top:1rem" hidden>
@@ -290,6 +392,41 @@
       el.textContent = msg;
     }
 
+    const ACTION_IDS = ["btnAnalyze", "btnClearImage", "btnSummary", "btnHistory"];
+
+    function setButtonLoading(btnId, loading, activeLabel, idleLabel) {
+      const btn = $(btnId);
+      const label = btn.querySelector(".btn-label");
+      const spin = btn.querySelector(".btn-spinner");
+      btn.classList.toggle("is-loading", loading);
+      if (label) label.textContent = loading ? activeLabel : idleLabel;
+      if (spin) spin.hidden = !loading;
+    }
+
+    function setActionsDisabled(disabled) {
+      ACTION_IDS.forEach((id) => {
+        $(id).disabled = disabled;
+      });
+    }
+
+    /** @returns {() => void} stop timer */
+    function startElapsed(elId) {
+      const el = $(elId);
+      const t0 = Date.now();
+      const tick = () => {
+        const s = Math.floor((Date.now() - t0) / 1000);
+        el.textContent = s + "s";
+      };
+      tick();
+      const id = setInterval(tick, 250);
+      return () => clearInterval(id);
+    }
+
+    function showLoadPanel(panelId, show) {
+      const p = $(panelId);
+      p.setAttribute("aria-hidden", show ? "false" : "true");
+    }
+
     /** Avoid res.json() on HTML error pages (wrong URL, payload too large, etc.) */
     async function readJsonSafe(res) {
       const text = await res.text();
@@ -317,6 +454,15 @@
     $("btnAnalyze").addEventListener("click", async () => {
       showErr($("analyzeErr"), "");
       $("analyzeOut").hidden = true;
+      $("analyzeElapsed").textContent = "0s";
+      $("analyzeLoadHint").textContent = imageB64
+        ? "OCR and risk scoring can take 10–60s on large images. Do not close this tab."
+        : "Simulation path (no image) — typically responds quickly.";
+
+      setActionsDisabled(true);
+      setButtonLoading("btnAnalyze", true, "Analyzing…", "Run analyze");
+      showLoadPanel("analyzeLoad", true);
+      const stopElapsed = startElapsed("analyzeElapsed");
 
       const body = {
         userId: uid(),
@@ -349,12 +495,22 @@
         $("analyzeOut").hidden = false;
       } catch (e) {
         showErr($("analyzeErr"), e.message || String(e));
+      } finally {
+        stopElapsed();
+        showLoadPanel("analyzeLoad", false);
+        setButtonLoading("btnAnalyze", false, "Analyzing…", "Run analyze");
+        setActionsDisabled(false);
       }
     });
 
     $("btnSummary").addEventListener("click", async () => {
       showErr($("summaryErr"), "");
       $("summaryOut").hidden = true;
+      $("summaryElapsed").textContent = "0s";
+      setActionsDisabled(true);
+      setButtonLoading("btnSummary", true, "Loading…", "Load summary");
+      showLoadPanel("summaryLoad", true);
+      const stopElapsed = startElapsed("summaryElapsed");
       try {
         const res = await fetch(apiBase() + "/api/user/" + uid() + "/summary");
         const data = await readJsonSafe(res);
@@ -373,12 +529,22 @@
         $("summaryOut").hidden = false;
       } catch (e) {
         showErr($("summaryErr"), e.message || String(e));
+      } finally {
+        stopElapsed();
+        showLoadPanel("summaryLoad", false);
+        setButtonLoading("btnSummary", false, "Loading…", "Load summary");
+        setActionsDisabled(false);
       }
     });
 
     $("btnHistory").addEventListener("click", async () => {
       showErr($("historyErr"), "");
       $("historyOut").hidden = true;
+      $("historyElapsed").textContent = "0s";
+      setActionsDisabled(true);
+      setButtonLoading("btnHistory", true, "Loading…", "Load history");
+      showLoadPanel("historyLoad", true);
+      const stopElapsed = startElapsed("historyElapsed");
       try {
         const res = await fetch(apiBase() + "/api/user/" + uid() + "/history?take=20&skip=0");
         const data = await readJsonSafe(res);
@@ -439,6 +605,11 @@
         $("historyOut").hidden = false;
       } catch (e) {
         showErr($("historyErr"), e.message || String(e));
+      } finally {
+        stopElapsed();
+        showLoadPanel("historyLoad", false);
+        setButtonLoading("btnHistory", false, "Loading…", "Load history");
+        setActionsDisabled(false);
       }
     });
 
