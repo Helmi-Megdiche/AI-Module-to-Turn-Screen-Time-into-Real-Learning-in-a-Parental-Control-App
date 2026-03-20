@@ -25,6 +25,6 @@ fix(api): raise JSON limit for base64 screenshot payloads
 feat(demo): add history panel with pagination
 ```
 
-## Push
+## Push (strict)
 
-**Do not `git push`** unless the user explicitly asks to push. Local commits only by default.
+**Never run `git push` (or `git push --force`, PR merge-to-remote, etc.) unless the user explicitly says to push** — e.g. “push to origin” or “push my commits.” Suggesting a push is fine; executing it is not. Local commits only unless instructed otherwise.
