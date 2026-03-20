@@ -1,0 +1,30 @@
+---
+description: Git commit style and when to push
+alwaysApply: true
+---
+
+# Git: commits and push
+
+## When work is done
+
+After completing a coherent piece of work (feature, fix, docs, refactor), **create a local `git commit`**. Do not leave meaningful changes uncommitted at the end of a task.
+
+## Commit messages (professional)
+
+- Use **imperative mood** (`Add`, `Fix`, `Refactor`, not `Added` / `Fixing`).
+- Prefer **Conventional Commits**: `type(scope): short summary`  
+  Types: `feat`, `fix`, `docs`, `refactor`, `chore`, `test`, etc.
+- **First line** ≤ ~72 characters; optional body with bullets for multiple files or non-obvious rationale.
+- Be specific: what changed and why it matters, not vague text like `update` or `fixes`.
+
+**Examples**
+
+```
+fix(api): raise JSON limit for base64 screenshot payloads
+
+feat(demo): add history panel with pagination
+```
+
+## Push
+
+**Do not `git push`** unless the user explicitly asks to push. Local commits only by default.
