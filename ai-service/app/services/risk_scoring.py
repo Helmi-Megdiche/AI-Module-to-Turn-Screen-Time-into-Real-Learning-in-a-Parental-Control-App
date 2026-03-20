@@ -28,14 +28,17 @@ SIGNAL_RULES: tuple[SignalRule, ...] = (
     SignalRule(
         label="self-harm",
         weight=1.2,
+        aliases=("harm", "suicide", "cut", "cutting"),
+        context=("self", "yourself", "deliberate", "intentional", "damage", "injury", "attempt", "void"),
         patterns=(
             r"\bkill\s+yourself\b",
             r"\bhurt\s+yourself\b",
             r"\bcut\s+yourself\b",
             r"\bend\s+your\s+life\b",
             r"\bsuicide\b",
-            r"\bself[\s-]*harm\b",
+            r"\bself[\s-]*harm[a-z]{0,2}\b",
         ),
+        window=2,
     ),
     SignalRule(
         label="violent threat",
