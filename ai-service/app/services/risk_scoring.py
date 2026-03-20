@@ -32,9 +32,13 @@ SIGNAL_RULES: tuple[SignalRule, ...] = (
         context=("self", "yourself", "deliberate", "intentional", "damage", "injury", "attempt", "void"),
         patterns=(
             r"\bkill\s+yourself\b",
+            r"\bkill\s+myself\b",
             r"\bhurt\s+yourself\b",
+            r"\bhurt\s+myself\b",
             r"\bcut\s+yourself\b",
+            r"\bcut\s+myself\b",
             r"\bend\s+your\s+life\b",
+            r"\bend\s+my\s+life\b",
             r"\bsuicide\b",
             r"\bself[\s-]*harm[a-z]{0,2}\b",
         ),
