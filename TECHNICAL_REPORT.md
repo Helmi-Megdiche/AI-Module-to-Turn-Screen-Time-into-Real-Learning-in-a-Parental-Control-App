@@ -1,5 +1,7 @@
 # Technical Report — AI Module for Parental Control (PFE)
 
+**Document version:** 1.2 · **Last updated:** 2026-03-21  
+
 **Scope:** This document describes the full technical stack of the project: screenshot ingestion, local OCR, multilingual zero-shot moderation, risk categorisation, mission assignment, persistence in PostgreSQL, and the static demo UI. It is intended as the primary engineering reference for the PFE defence and handover.
 
 ---
@@ -20,17 +22,23 @@ The design prioritises **local execution on CPU** (no paid cloud inference requi
 
 ## Key results
 
-Summary of **offline moderation evaluation** (`evaluate_moderation.py` over **15** cases in `moderation_eval_dataset.json`) after calibration (**dangerous** = **0.85**, **matched keywords** = **0.6**, **risky** = **0.4**):
+**Calibration context:** `evaluate_moderation.py`, **15** cases, `moderation_eval_dataset.json`, thresholds **risky 0.4** / **dangerous 0.85** / **matched keywords 0.6**.
 
-- **Hate speech (mixed FR/EN):** case `danger-fr-en-hate-mixed` → **`dangerous`**, **riskScore ≈ 0.98**, **`matchedKeywords` includes `"hate speech"`**, **fallback not used** (clean input).  
-- **Fallback discipline:** all **15** cases matched **expected** `used_fallback` flags (empty/short/degraded paths behave as specified).  
-- **Category alignment:** **~11/15** cases matched expected category at last reported run (harassment-like strings often stay **dangerous** because the model assigns very high scores).  
-- **Risk band checks:** **~12/15** scores fell inside expected min–max ranges; mismatches are mostly “model hotter than dataset upper bound” on borderline samples.  
-- **Per-label exact match:** **4/15** — multi-label outputs often include extra hypotheses above **0.6**; the dataset expects a minimal label set.  
-- **Latency (CPU):** typical transformer inference **~2–3.5 s** per case on reference hardware; **p95** in the **~2.9 s** range in the same run (first load excluded).  
-- **End-to-end:** screenshot test with eval hate lines → **`dangerous`**, **risk ≈ 0.97**, **`hate speech` present**, mission **“Go outside for 20 minutes” (10 pts)**, row visible in **`/history`** and **`/summary`**.
+| Metric | Result (calibrated baseline) |
+|--------|-------------------------------|
+| Flagship hate-speech case (`danger-fr-en-hate-mixed`) | **`dangerous`**, **risk ≈ 0.98**, **`"hate speech"`** in `matchedKeywords`, **no fallback** (clean text) |
+| Fallback flags vs dataset | **15 / 15** |
+| Category vs expected | **~11 / 15** (harassment-like text often stays **dangerous** — high model scores) |
+| Risk score inside expected min–max | **~12 / 15** (remaining gaps mostly “score above dataset upper bound”) |
+| Exact `matchedKeywords` set vs expected | **4 / 15** (model often returns extra labels above **0.6**) |
+| Transformer inference (steady state, CPU) | Typical **~2–3.5 s** per case; **p95 ≈ 2.9 s** in the same eval run |
+| Cold start / first inference | **Slower** right after service startup (weights loaded, first torch pass); subsequent calls on the **same OCR string** also benefit from **`@lru_cache`** on the zero-shot path |
+| End-to-end (screenshot + eval hate lines) | **`dangerous`**, **risk ≈ 0.97**, **`hate speech`**, mission **Go outside for 20 minutes (10 pts)**, persisted → **`GET /history`** & **`GET /summary`** |
 
-*Re-run the script after any threshold or model change; counts above are representative of the calibrated baseline.*
+**Notes:**
+
+- Re-run `evaluate_moderation.py` after any threshold or model change and refresh this table for the thesis “frozen” revision.  
+- Eval timings exclude the **very first** model hit if you run a single long session; in production-like use, budget extra time for the **first** `/analyze` after each AI service restart.
 
 ---
 
@@ -80,6 +88,8 @@ flowchart TB
   Prisma --> TAnalysis
   Prisma --> TMission
 ```
+
+**Figure — system architecture (Mermaid).** If your thesis PDF pipeline (Word, LaTeX, etc.) does **not** render Mermaid, export a **static PNG** (e.g. [mermaid.live](https://mermaid.live), a Mermaid plugin in VS Code, or the [`mermaid-cli`](https://github.com/mermaid-js/mermaid-cli) `mmdc` tool) and **replace or supplement** this block with that image so printed copies stay readable.
 
 **Diagram vs code:** `POST /analyze` runs **OCR**, then **`analyze_text` → `moderate()`**. The **solid** path is always entered; the **dashed** edge is **conditional logic inside `moderate()`** (not a second HTTP call). On the happy path, the Hugging Face **zero-shot** pipeline runs inside `moderate()`; otherwise **`risk_scoring.analyze_text`** supplies scores and keyword-style matches.
 
