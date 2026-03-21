@@ -1,5 +1,5 @@
 """
-FastAPI entrypoint for screenshot OCR + keyword risk scoring.
+FastAPI entrypoint for screenshot OCR + local moderation-based risk scoring.
 Matches the Node backend contract: POST /analyze { "image": "<base64>" }.
 """
 
@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.services import ocr_service
-from app.services.risk_scoring import analyze_text, category_from_score
+from app.services.moderation_service import analyze_text, category_from_model_score, get_classifier
 from app.utils.image_utils import base64_to_pil
 
 logging.basicConfig(level=logging.INFO)
@@ -20,12 +20,17 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Warm up EasyOCR once so the first user request isn't 30s+ on cold start
+    # Warm up OCR and moderation once so the first user request isn't too slow.
     try:
         ocr_service.get_reader()
         logger.info("EasyOCR reader ready")
     except Exception as e:
         logger.warning("Could not preload EasyOCR (will load on first request): %s", e)
+    try:
+        get_classifier()
+        logger.info("Moderation model ready")
+    except Exception as e:
+        logger.warning("Could not preload moderation model (will fall back if needed): %s", e)
     yield
 
 
@@ -79,7 +84,7 @@ async def analyze(body: AnalyzeRequest):
     analysis = analyze_text(raw)
     matches = analysis.matched_keywords
     risk_score = analysis.risk_score
-    category = category_from_score(risk_score)
+    category = category_from_model_score(risk_score)
 
     return AnalyzeResponse(
         text=raw,
