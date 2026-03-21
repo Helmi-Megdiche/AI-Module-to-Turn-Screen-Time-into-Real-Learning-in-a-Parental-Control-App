@@ -72,10 +72,49 @@ function missionForRiskScore(riskScore) {
   return { mission: 'Go outside for 20 minutes', points: 10 };
 }
 
+async function buildPreviewAnalyzeResult({ userId, age, analysis, mission }) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+
+  return {
+    analysis: {
+      id: null,
+      userId,
+      text: analysis.text,
+      displayText: analysis.displayText,
+      matchedKeywords: analysis.matchedKeywords,
+      riskScore: analysis.riskScore,
+      category: analysis.category,
+      usedAI: analysis.usedAI,
+      createdAt: null,
+    },
+    mission: {
+      mission: mission.mission,
+      points: mission.points,
+      status: 'preview',
+    },
+    user: user ?? {
+      id: userId,
+      age,
+      points: 0,
+      createdAt: null,
+    },
+  };
+}
+
 async function runAnalyze({ userId, age, image }) {
+  const analysis = await resolveAnalysisPayload(image);
   const { text, riskScore, category, usedAI, displayText, matchedKeywords } =
-    await resolveAnalysisPayload(image);
+    analysis;
   const { mission, points } = missionForRiskScore(riskScore);
+
+  if (!hasProvidedImage(image)) {
+    return buildPreviewAnalyzeResult({
+      userId,
+      age,
+      analysis,
+      mission: { mission, points },
+    });
+  }
 
   return prisma.$transaction(async (tx) => {
     let user = await tx.user.findUnique({ where: { id: userId } });
