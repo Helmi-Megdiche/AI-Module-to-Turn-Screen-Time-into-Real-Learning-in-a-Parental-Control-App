@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 from pathlib import Path
 from statistics import mean
 
@@ -13,7 +15,15 @@ def _within_range(score: float, low: float, high: float) -> bool:
     return low <= score <= high
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Offline moderation evaluation over moderation_eval_dataset.json")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit with code 1 if any fallback flag mismatches or the flagship hate-speech case regresses",
+    )
+    args = parser.parse_args(argv)
+
     cases = json.loads(DATASET_PATH.read_text(encoding="utf-8"))
     rows = []
 
@@ -93,6 +103,26 @@ def main() -> None:
         print(f"avg_inference_ms: {mean(timings):.2f}")
         print(f"p95_inference_ms: {ordered[p95_index]:.2f}")
 
+    if args.strict:
+        if fallback_ok < total:
+            print("STRICT: expected fallback flag mismatch for one or more cases", file=sys.stderr)
+            return 1
+        flagship = next((r for r in rows if r["id"] == "danger-fr-en-hate-mixed"), None)
+        if flagship is None:
+            print("STRICT: dataset missing id danger-fr-en-hate-mixed", file=sys.stderr)
+            return 1
+        if flagship["actual_category"] != "dangerous" or flagship["actual_risk"] < 0.85:
+            print(
+                f"STRICT: flagship hate-speech case regression (category={flagship['actual_category']!r}, risk={flagship['actual_risk']})",
+                file=sys.stderr,
+            )
+            return 1
+        if "hate speech" not in set(flagship["actual_labels"]):
+            print("STRICT: flagship case missing 'hate speech' in matched labels", file=sys.stderr)
+            return 1
+
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,0 +1,13 @@
+{
+  "name": "pfe-parental-control",
+  "private": true,
+  "description": "Root scripts for full-stack test runner and git hooks",
+  "scripts": {
+    "test": "node scripts/run-all-tests.js",
+    "test:full": "node scripts/run-all-tests.js --full",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

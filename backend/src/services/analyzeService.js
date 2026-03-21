@@ -162,4 +162,4 @@ async function runAnalyze({ userId, age, image }) {
   });
 }
 
-module.exports = { runAnalyze };
+module.exports = { runAnalyze, missionForRiskScore };

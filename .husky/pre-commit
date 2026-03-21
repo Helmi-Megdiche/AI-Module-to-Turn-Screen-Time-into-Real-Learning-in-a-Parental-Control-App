@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+cd "$(dirname "$0")/.." || exit 1
+
+# Fast checks only (Jest + pytest). Run `npm run test:full` before releases / thesis freeze.
+npm test
