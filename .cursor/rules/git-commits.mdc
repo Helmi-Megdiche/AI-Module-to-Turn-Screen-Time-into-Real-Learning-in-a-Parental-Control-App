@@ -9,6 +9,10 @@ alwaysApply: true
 
 After completing a coherent piece of work (feature, fix, docs, refactor), **create a local `git commit`**. Do not leave meaningful changes uncommitted at the end of a task.
 
+## Exception: reports
+
+Do **not** commit generated reports, handoff notes, or ChatGPT-facing report files such as `*REPORT*.md`, `CHATGPT_*.md`, or similar documentation artifacts unless the user explicitly asks to commit them.
+
 ## Commit messages (professional)
 
 - Use **imperative mood** (`Add`, `Fix`, `Refactor`, not `Added` / `Fixing`).
