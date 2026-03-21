@@ -1,10 +1,10 @@
 const prisma = require('../config/prisma');
 const aiService = require('./aiService');
 
-const SIMULATED_AI = {
-  text: 'sample extracted text',
-  riskScore: 0.6,
-  category: 'risky',
+const EMPTY_ANALYSIS = {
+  text: '',
+  riskScore: 0,
+  category: 'safe',
 };
 
 function hasProvidedImage(image) {
@@ -41,9 +41,9 @@ function normalizeAiResponse(data) {
 async function resolveAnalysisPayload(image) {
   if (!hasProvidedImage(image)) {
     return {
-      ...SIMULATED_AI,
+      ...EMPTY_ANALYSIS,
       usedAI: false,
-      displayText: SIMULATED_AI.text,
+      displayText: '',
       matchedKeywords: [],
     };
   }

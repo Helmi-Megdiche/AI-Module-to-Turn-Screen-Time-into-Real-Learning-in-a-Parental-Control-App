@@ -269,7 +269,7 @@
 
     <section>
       <h2>1 · Analyze</h2>
-      <p class="muted" style="margin-top:0">Send a screenshot as base64. Leave empty to use the <strong>simulation</strong> path (no AI).</p>
+      <p class="muted" style="margin-top:0">Send a screenshot as base64. Leave empty to run a neutral no-image analysis result.</p>
       <div style="margin:1rem 0">
         <label for="file">Image file (optional)</label>
         <input id="file" type="file" accept="image/*" />
@@ -477,7 +477,7 @@
       $("analyzeElapsed").textContent = "0s";
       $("analyzeLoadHint").textContent = imageB64
         ? "OCR and risk scoring can take 10–60s on large images. Do not close this tab."
-        : "Simulation path (no image) — typically responds quickly.";
+        : "No image provided — the API will return a neutral safe result.";
 
       setActionsDisabled(true);
       setButtonLoading("btnAnalyze", true, "Analyzing…", "Run analyze");
