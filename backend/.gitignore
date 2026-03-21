@@ -3,4 +3,7 @@ node_modules/
 *.log
 logs/
 
+# Local E2E payloads (see scripts/gen_hate_analyze_payload.py)
+tmp_analyze_*.json
+
 # Prisma (generated client lives under node_modules/@prisma/client)
