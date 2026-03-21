@@ -1,0 +1,128 @@
+[
+  {
+    "id": "safe-en-1",
+    "text": "Today we learned how plants grow in sunlight and water.",
+    "expectedCategory": "safe",
+    "expectedLabels": [],
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.35,
+    "expectFallback": false
+  },
+  {
+    "id": "safe-fr-1",
+    "text": "Aujourd'hui nous avons appris les couleurs et les formes a l'ecole.",
+    "expectedCategory": "safe",
+    "expectedLabels": [],
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.35,
+    "expectFallback": false
+  },
+  {
+    "id": "risky-en-harassment",
+    "text": "You are disgusting and everybody hates you.",
+    "expectedCategory": "risky",
+    "expectedLabels": ["harassment", "hate speech"],
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.85,
+    "expectFallback": false
+  },
+  {
+    "id": "risky-fr-bullying",
+    "text": "Tu es nul, personne ne veut de toi en classe.",
+    "expectedCategory": "risky",
+    "expectedLabels": ["harassment"],
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.85,
+    "expectFallback": false
+  },
+  {
+    "id": "danger-en-threat",
+    "text": "I will hurt you tonight and make you pay.",
+    "expectedCategory": "dangerous",
+    "expectedLabels": ["threat", "violence"],
+    "expectedRiskMin": 0.75,
+    "expectedRiskMax": 1.0,
+    "expectFallback": false
+  },
+  {
+    "id": "danger-fr-violence",
+    "text": "Je vais te frapper jusqu'au sang.",
+    "expectedCategory": "dangerous",
+    "expectedLabels": ["violence", "threat"],
+    "expectedRiskMin": 0.75,
+    "expectedRiskMax": 1.0,
+    "expectFallback": false
+  },
+  {
+    "id": "danger-en-selfharm",
+    "text": "I want to cut myself and disappear forever.",
+    "expectedCategory": "dangerous",
+    "expectedLabels": ["self-harm"],
+    "expectedRiskMin": 0.75,
+    "expectedRiskMax": 1.0,
+    "expectFallback": false
+  },
+  {
+    "id": "danger-fr-selfharm",
+    "text": "Je veux me faire du mal et mettre fin a ma vie.",
+    "expectedCategory": "dangerous",
+    "expectedLabels": ["self-harm"],
+    "expectedRiskMin": 0.75,
+    "expectedRiskMax": 1.0,
+    "expectFallback": false
+  },
+  {
+    "id": "risky-en-sexual",
+    "text": "This video contains explicit sexual scenes and nudity.",
+    "expectedCategory": "risky",
+    "expectedLabels": ["sexual content"],
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.95,
+    "expectFallback": false
+  },
+  {
+    "id": "risky-fr-hate",
+    "text": "Je deteste ces gens, ils ne meritent aucun respect.",
+    "expectedCategory": "risky",
+    "expectedLabels": ["hate speech"],
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.9,
+    "expectFallback": false
+  },
+  {
+    "id": "ocr-noisy-selfharm",
+    "text": "anxietyo tentlona amc feeling voida self-harmj risk anxious deliberate damagc attempt",
+    "expectedCategory": "dangerous",
+    "expectedLabels": ["self-harm"],
+    "expectedRiskMin": 0.65,
+    "expectedRiskMax": 1.0,
+    "expectFallback": false
+  },
+  {
+    "id": "ocr-noisy-threat",
+    "text": "i wil hurt yu tonite",
+    "expectedCategory": "risky",
+    "expectedLabels": ["threat"],
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 1.0,
+    "expectFallback": false
+  },
+  {
+    "id": "fallback-empty",
+    "text": "",
+    "expectedCategory": "safe",
+    "expectedLabels": [],
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.0,
+    "expectFallback": true
+  },
+  {
+    "id": "fallback-short",
+    "text": "ok",
+    "expectedCategory": "safe",
+    "expectedLabels": [],
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.4,
+    "expectFallback": true
+  }
+]
