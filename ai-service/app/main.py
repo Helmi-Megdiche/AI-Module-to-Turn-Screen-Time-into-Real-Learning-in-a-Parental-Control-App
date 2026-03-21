@@ -11,7 +11,11 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.services import ocr_service
-from app.services.moderation_service import analyze_text, category_from_model_score, get_classifier
+from app.services.moderation_service import (
+    analyze_text,
+    category_from_model_score,
+    warm_classifier_async,
+)
 from app.utils.image_utils import base64_to_pil
 
 logging.basicConfig(level=logging.INFO)
@@ -20,17 +24,17 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Warm up OCR and moderation once so the first user request isn't too slow.
+    # Warm up OCR once and start moderation loading in the background.
     try:
         ocr_service.get_reader()
         logger.info("EasyOCR reader ready")
     except Exception as e:
         logger.warning("Could not preload EasyOCR (will load on first request): %s", e)
     try:
-        get_classifier()
-        logger.info("Moderation model ready")
+        warm_classifier_async()
+        logger.info("Moderation model warmup started")
     except Exception as e:
-        logger.warning("Could not preload moderation model (will fall back if needed): %s", e)
+        logger.warning("Could not start moderation warmup (will fall back if needed): %s", e)
     yield
 
 

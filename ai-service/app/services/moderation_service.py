@@ -7,6 +7,7 @@ from functools import lru_cache
 import logging
 import re
 from time import perf_counter
+import threading
 from typing import Any
 
 from transformers import pipeline
@@ -26,6 +27,8 @@ from app.services.risk_scoring import RiskAnalysis, analyze_text as analyze_text
 logger = logging.getLogger(__name__)
 
 _classifier: Any = None
+_classifier_lock = threading.Lock()
+_classifier_loading = False
 
 
 @dataclass(frozen=True)
@@ -39,17 +42,46 @@ class ModerationResult:
     used_fallback: bool
 
 
-def get_classifier():
-    global _classifier
-    if _classifier is None:
-        _classifier = pipeline(
-            "zero-shot-classification",
-            model=ZERO_SHOT_MODEL_NAME,
-            tokenizer=ZERO_SHOT_MODEL_NAME,
-            device=-1,
-        )
-        logger.info("Loaded moderation model: %s", ZERO_SHOT_MODEL_NAME)
+def _build_classifier():
+    return pipeline(
+        "zero-shot-classification",
+        model=ZERO_SHOT_MODEL_NAME,
+        tokenizer=ZERO_SHOT_MODEL_NAME,
+        device=-1,
+    )
+
+
+def _load_classifier_once():
+    global _classifier, _classifier_loading
+    with _classifier_lock:
+        if _classifier is not None:
+            _classifier_loading = False
+            return _classifier
+        try:
+            _classifier = _build_classifier()
+            logger.info("Loaded moderation model: %s", ZERO_SHOT_MODEL_NAME)
+        finally:
+            _classifier_loading = False
     return _classifier
+
+
+def warm_classifier_async() -> None:
+    global _classifier_loading
+    if _classifier is not None or _classifier_loading:
+        return
+    _classifier_loading = True
+    thread = threading.Thread(target=_load_classifier_once, name="moderation-model-loader", daemon=True)
+    thread.start()
+
+
+def is_classifier_ready() -> bool:
+    return _classifier is not None
+
+
+def get_classifier():
+    if _classifier is not None:
+        return _classifier
+    return _load_classifier_once()
 
 
 def category_from_model_score(score: float) -> str:
@@ -117,6 +149,9 @@ def moderate(text: str) -> ModerationResult:
         return _fallback_result(cleaned, "OCR text too short")
 
     try:
+        if not is_classifier_ready():
+            warm_classifier_async()
+            return _fallback_result(cleaned, "moderation model warming up")
         t0 = perf_counter()
         label_scores = dict(_classify_zero_shot_cached(cleaned))
         inference_ms = round((perf_counter() - t0) * 1000, 2)
