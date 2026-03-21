@@ -18,6 +18,22 @@ The design prioritises **local execution on CPU** (no paid cloud inference requi
 
 ---
 
+## Key results
+
+Summary of **offline moderation evaluation** (`evaluate_moderation.py` over **15** cases in `moderation_eval_dataset.json`) after calibration (**dangerous** = **0.85**, **matched keywords** = **0.6**, **risky** = **0.4**):
+
+- **Hate speech (mixed FR/EN):** case `danger-fr-en-hate-mixed` → **`dangerous`**, **riskScore ≈ 0.98**, **`matchedKeywords` includes `"hate speech"`**, **fallback not used** (clean input).  
+- **Fallback discipline:** all **15** cases matched **expected** `used_fallback` flags (empty/short/degraded paths behave as specified).  
+- **Category alignment:** **~11/15** cases matched expected category at last reported run (harassment-like strings often stay **dangerous** because the model assigns very high scores).  
+- **Risk band checks:** **~12/15** scores fell inside expected min–max ranges; mismatches are mostly “model hotter than dataset upper bound” on borderline samples.  
+- **Per-label exact match:** **4/15** — multi-label outputs often include extra hypotheses above **0.6**; the dataset expects a minimal label set.  
+- **Latency (CPU):** typical transformer inference **~2–3.5 s** per case on reference hardware; **p95** in the **~2.9 s** range in the same run (first load excluded).  
+- **End-to-end:** screenshot test with eval hate lines → **`dangerous`**, **risk ≈ 0.97**, **`hate speech` present**, mission **“Go outside for 20 minutes” (10 pts)**, row visible in **`/history`** and **`/summary`**.
+
+*Re-run the script after any threshold or model change; counts above are representative of the calibrated baseline.*
+
+---
+
 ## 2. High-level architecture
 
 ```mermaid
@@ -44,9 +60,9 @@ flowchart TB
 
   subgraph ai["Python AI service :8000"]
     FastAPI[FastAPI]
-    OCR[EasyOCR]
-    Mod[Zero-shot moderation Transformers]
-    Fallback[Rule-based risk_scoring]
+    OCR[EasyOCR extract_text]
+    Moderate["moderate() — zero-shot pipeline + LRU cache"]
+    Fallback["risk_scoring fallback rules"]
   end
 
   Demo --> AnalyzeCtrl
@@ -57,13 +73,15 @@ flowchart TB
   AnalyzeSvc --> AiClient
   AiClient -->|"POST /analyze { image }"| FastAPI
   FastAPI --> OCR
-  OCR --> Mod
-  Mod -.->|empty / short / degraded / error| Fallback
+  OCR --> Moderate
+  Moderate -.->|"inside moderate(): empty or short OCR, degraded startup, or inference exception"| Fallback
   AnalyzeSvc --> Prisma
   Prisma --> TUser
   Prisma --> TAnalysis
   Prisma --> TMission
 ```
+
+**Diagram vs code:** `POST /analyze` runs **OCR**, then **`analyze_text` → `moderate()`**. The **solid** path is always entered; the **dashed** edge is **conditional logic inside `moderate()`** (not a second HTTP call). On the happy path, the Hugging Face **zero-shot** pipeline runs inside `moderate()`; otherwise **`risk_scoring.analyze_text`** supplies scores and keyword-style matches.
 
 **Data flow (analyse with image):**
 
@@ -162,6 +180,8 @@ There is **no** “safe” label: safety is implied when no hypothesis reaches h
 | `CACHE_SIZE` | `256` | LRU cache entries for repeated identical OCR strings (`MODERATION_CACHE_SIZE`) |
 | `STARTUP_MODEL_LOAD_TIMEOUT_SECONDS` | `20` | Max wait for model load at startup (`MODERATION_STARTUP_MODEL_LOAD_TIMEOUT_SECONDS`) |
 
+**Calibration and deployment:** Every value in the table is read through **`os.getenv`** helpers in `config.py`. You can override **any** of them at process start with the corresponding **`MODERATION_*`** (or **`MODERATION_MODEL_NAME`**, **`MODERATION_HYPOTHESIS_TEMPLATE`**) environment variable **without editing code** — this is how thresholds were tuned during calibration (e.g. raising **`MODERATION_DANGEROUS_THRESHOLD`** or **`MODERATION_MATCHED_KEYWORDS_THRESHOLD`** for experiments).
+
 ### 4.6 Fallback behaviour (`moderation_service.moderate`)
 
 Fallback is used when:
@@ -191,11 +211,13 @@ Response model (JSON keys as returned):
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `text` | string | Raw OCR text |
-| `displayText` | string | Parent-facing line (keyword normalisation when fallback; otherwise typically same as OCR) |
-| `matchedKeywords` | string[] | Labels above keyword threshold |
+| `text` | string | **Raw OCR text** — exact string returned from EasyOCR (audit trail). |
+| `displayText` | string | **Parent-facing line** — same as `text` on the **transformer** path; on **fallback**, tokens that fuzzy-match the rule lexicon are replaced by their **canonical dictionary form** (from `risk_scoring.build_display_text`), not by bracketed category names. |
+| `matchedKeywords` | string[] | Semantic labels above keyword threshold (e.g. `hate speech`, `threat`). |
 | `riskScore` | number | Aggregate score |
 | `category` | string | `safe` \| `risky` \| `dangerous` |
+
+**`text` vs `displayText` (concrete):** Suppose OCR reads `immigress` (garbled) where the fallback lexicon expects **`immigres`**. Then **`text`** may still contain `immigress`, while **`displayText`** can show **`immigres`** so the parent sees a normalised spelling. Semantic categories appear only in **`matchedKeywords`**, not as inline tags in `displayText` (so not `"you are [harassment]"` — that is **not** how the pipeline formats the string).
 
 ---
 
@@ -292,7 +314,7 @@ So a **dangerous** category with score **0.98** always receives the **20-minute 
 2. **OCR noise:** Real screenshots produce merged or garbled tokens; moderation is robust in tests but **not identical** to eval-on-clean-text.  
 3. **EasyOCR `en` only:** Full French OCR quality is not guaranteed; mixed or Latin script may partially work.  
 4. **Latency:** First model load and cold OCR are slow; demo machines should allow sufficient **`AI_REQUEST_TIMEOUT_MS`**.  
-5. **Security:** No authentication on APIs in this academic prototype; production would require auth, rate limits, and content-handling policies.
+5. **Security (prototype):** The HTTP APIs are **unauthenticated** and intended for local / jury demo use only. A **production** deployment should add at least: **HTTPS**, **authentication** (e.g. JWT or session cookies for parents), **authorisation** per child account, **rate limiting** and payload quotas on `/api/analyze`, **input validation** and virus scanning on uploads if accepting files, structured **logging** without storing raw harmful text longer than necessary, and alignment with **privacy law** (minimisation, retention, parental consent).
 
 ---
 
