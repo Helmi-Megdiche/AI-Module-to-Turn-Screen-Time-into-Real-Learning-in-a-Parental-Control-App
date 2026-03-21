@@ -108,6 +108,15 @@
     "expectFallback": false
   },
   {
+    "id": "danger-fr-en-hate-mixed",
+    "text": "Tous les arabes sont des terrorists. They should go back to their country. Les immigres sont des rats. I hate them all.",
+    "expectedCategory": "dangerous",
+    "expectedLabels": ["hate speech"],
+    "expectedRiskMin": 0.75,
+    "expectedRiskMax": 1.0,
+    "expectFallback": false
+  },
+  {
     "id": "fallback-empty",
     "text": "",
     "expectedCategory": "safe",

@@ -4,7 +4,6 @@ Matches the Node backend contract: POST /analyze { "image": "<base64>" }.
 """
 
 import logging
-from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
@@ -14,7 +13,7 @@ from app.services import ocr_service
 from app.services.moderation_service import (
     analyze_text,
     category_from_model_score,
-    warm_classifier_async,
+    initialize_moderation,
 )
 from app.utils.image_utils import base64_to_pil
 
@@ -22,23 +21,19 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Warm up OCR once and start moderation loading in the background.
+app = FastAPI(title="Parental Control AI Service")
+
+
+@app.on_event("startup")
+def startup_event() -> None:
+    # Block startup until OCR and moderation are initialized.
     try:
         ocr_service.get_reader()
         logger.info("EasyOCR reader ready")
     except Exception as e:
         logger.warning("Could not preload EasyOCR (will load on first request): %s", e)
-    try:
-        warm_classifier_async()
-        logger.info("Moderation model warmup started")
-    except Exception as e:
-        logger.warning("Could not start moderation warmup (will fall back if needed): %s", e)
-    yield
-
-
-app = FastAPI(title="Parental Control AI Service", lifespan=lifespan)
+    if not initialize_moderation():
+        logger.error("Moderation model unavailable at startup; service running in degraded fallback-only mode")
 
 
 class AnalyzeRequest(BaseModel):

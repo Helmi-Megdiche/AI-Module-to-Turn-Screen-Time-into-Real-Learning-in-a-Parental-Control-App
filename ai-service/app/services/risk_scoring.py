@@ -114,6 +114,29 @@ SIGNAL_RULES: tuple[SignalRule, ...] = (
         weight=0.25,
         aliases=("hate", "stupid", "idiot", "loser", "worthless"),
     ),
+    SignalRule(
+        label="hate speech",
+        weight=1.2,
+        aliases=(
+            "arabes",
+            "arabs",
+            "immigre",
+            "immigres",
+            "immigrant",
+            "immigrants",
+            "rats",
+            "terrorist",
+            "terrorists",
+        ),
+        patterns=(
+            r"\bgo\s+back\s+to\s+their\s+country\b",
+            r"\bi\s+hate\s+them\s+all\b",
+            r"\barab(?:es|s)?\s+(?:are|is|sont)\s+terror(?:ist|ists|iste|istes)\b",
+            r"\b(?:les\s+)?immigr(?:e|es|ants?)\s+sont\s+des\s+rats\b",
+            r"\b(?:these|those)\s+(?:people|immigr(?:e|es|ants?)|arab(?:es|s)?)\s+are\s+(?:rats|vermin|terrorists?)\b",
+            r"\b(?:hate|deteste)\s+(?:them|les)\s+(?:all|tous)\b",
+        ),
+    ),
 )
 
 ALL_KEYWORDS = [
