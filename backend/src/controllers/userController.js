@@ -153,6 +153,35 @@ async function getMissions(req, res) {
   }
 }
 
+/** `GET /api/user/:id/badges` — earned badges with metadata and award time. */
+async function getBadges(req, res) {
+  try {
+    const userId = getUserIdOr400(req, res);
+    if (userId === null) {
+      return;
+    }
+
+    const result = await userService.getBadges(userId);
+    if (result === null) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    return res.json({
+      success: true,
+      badges: result.badges,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to load badges',
+    });
+  }
+}
+
 /** `GET /api/user/:id/summary` — points, counts, average risk, dangerous analyses count. */
 async function getSummary(req, res) {
   try {
@@ -187,5 +216,6 @@ async function getSummary(req, res) {
 module.exports = {
   getHistory,
   getMissions,
+  getBadges,
   getSummary,
 };

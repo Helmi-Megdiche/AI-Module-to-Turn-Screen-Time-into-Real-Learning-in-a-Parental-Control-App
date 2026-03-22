@@ -6,6 +6,7 @@
  */
 const prisma = require('../config/prisma');
 const aiService = require('./aiService');
+const { awardPointBadges } = require('./badgeService');
 const {
   SAFE_POINTS_COOLDOWN_MINUTES,
   SAFE_POINTS_DAILY_CAP,
@@ -211,6 +212,9 @@ async function runAnalyze({ userId, age, image }) {
           where: { id: user.id },
           data: userUpdateData,
         });
+        if (shouldAward) {
+          await awardPointBadges(user.id, Number(user.points ?? 0), Number(userUpdated.points ?? 0), tx);
+        }
       }
     }
 

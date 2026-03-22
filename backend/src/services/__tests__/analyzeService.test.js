@@ -6,8 +6,13 @@ jest.mock('../aiService', () => ({
   analyzeImage: jest.fn(),
 }));
 
+jest.mock('../badgeService', () => ({
+  awardPointBadges: jest.fn(),
+}));
+
 const prisma = require('../../config/prisma');
 const aiService = require('../aiService');
+const { awardPointBadges } = require('../badgeService');
 const { missionForRiskScore, runAnalyze } = require('../analyzeService');
 
 describe('missionForRiskScore', () => {
@@ -132,6 +137,7 @@ describe('runAnalyze safe-point controls', () => {
         lastSafeResetDate: expect.any(Date),
       }),
     });
+    expect(awardPointBadges).toHaveBeenCalledWith(1, 0, 2, tx);
   });
 
   test('second safe mission within cooldown does not award points', async () => {
@@ -160,6 +166,7 @@ describe('runAnalyze safe-point controls', () => {
     expect(tx.analysis.create).toHaveBeenCalledTimes(1);
     expect(tx.mission.create).toHaveBeenCalledTimes(1);
     expect(tx.user.update).not.toHaveBeenCalled();
+    expect(awardPointBadges).not.toHaveBeenCalled();
   });
 
   test('safe mission after cooldown awards points again', async () => {
@@ -200,6 +207,7 @@ describe('runAnalyze safe-point controls', () => {
         lastSafeMissionAt: now,
       }),
     });
+    expect(awardPointBadges).toHaveBeenCalledWith(1, 2, 4, tx);
   });
 
   test('daily cap reached blocks safe point award until next reset', async () => {
@@ -228,6 +236,7 @@ describe('runAnalyze safe-point controls', () => {
     expect(tx.analysis.create).toHaveBeenCalledTimes(1);
     expect(tx.mission.create).toHaveBeenCalledTimes(1);
     expect(tx.user.update).not.toHaveBeenCalled();
+    expect(awardPointBadges).not.toHaveBeenCalled();
   });
 
   test('safe mission on a new day resets daily counter and can award', async () => {
@@ -268,6 +277,7 @@ describe('runAnalyze safe-point controls', () => {
         lastSafeResetDate: expect.any(Date),
       }),
     });
+    expect(awardPointBadges).toHaveBeenCalledWith(1, 10, 12, tx);
   });
 
   test('dangerous mission does not award immediate points', async () => {
@@ -296,5 +306,6 @@ describe('runAnalyze safe-point controls', () => {
     expect(tx.analysis.create).toHaveBeenCalledTimes(1);
     expect(tx.mission.create).toHaveBeenCalledTimes(1);
     expect(tx.user.update).not.toHaveBeenCalled();
+    expect(awardPointBadges).not.toHaveBeenCalled();
   });
 });

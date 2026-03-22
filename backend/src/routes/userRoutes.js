@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.get('/:id/history', userController.getHistory);
 router.get('/:id/missions', userController.getMissions);
+router.get('/:id/badges', userController.getBadges);
 router.get('/:id/summary', userController.getSummary);
 
 module.exports = router;

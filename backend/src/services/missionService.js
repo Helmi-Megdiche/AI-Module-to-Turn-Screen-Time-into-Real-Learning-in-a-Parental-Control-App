@@ -1,4 +1,8 @@
 const prisma = require('../config/prisma');
+const {
+  awardMissionBadges,
+  awardPointBadges,
+} = require('./badgeService');
 
 async function completeMission(missionId, bonusPoints = 0) {
   const missionIdInt = Number(missionId);
@@ -27,21 +31,21 @@ async function completeMission(missionId, bonusPoints = 0) {
       data: { status: 'completed' },
     });
 
-    await tx.user.update({
+    const bonus = bonusPointsInt > 0 ? bonusPointsInt : 0;
+    const userUpdated = await tx.user.update({
       where: { id: mission.userId },
       data: {
-        points: { increment: mission.points },
+        points: { increment: mission.points + bonus },
+        completedMissions: { increment: 1 },
       },
     });
 
-    if (bonusPointsInt > 0) {
-      await tx.user.update({
-        where: { id: mission.userId },
-        data: {
-          points: { increment: bonusPointsInt },
-        },
-      });
-    }
+    const previousPoints = Number(mission.user?.points ?? 0);
+    const newPoints = Number(userUpdated.points ?? previousPoints);
+    const previousCompleted = Number(mission.user?.completedMissions ?? 0);
+    const newCompleted = Number(userUpdated.completedMissions ?? previousCompleted);
+    await awardPointBadges(mission.userId, previousPoints, newPoints, tx);
+    await awardMissionBadges(mission.userId, previousCompleted, newCompleted, tx);
 
     return updatedMission;
   });

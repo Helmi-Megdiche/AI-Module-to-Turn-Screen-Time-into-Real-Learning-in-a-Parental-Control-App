@@ -2,6 +2,7 @@
  * Database reads for the “parent dashboard”: paginated analyses/missions and roll-up summary stats.
  */
 const prisma = require('../config/prisma');
+const { awardAgeBadges } = require('./badgeService');
 
 const DEFAULT_TAKE = 20;
 const MAX_TAKE = 100;
@@ -63,6 +64,31 @@ async function getMissions(userId, pagination) {
   return { missions, skip, take };
 }
 
+/** Earned badges only, latest first. Returns `null` when user does not exist. */
+async function getBadges(userId) {
+  const user = await getUserById(userId);
+  if (!user) {
+    return null;
+  }
+
+  const userBadges = await prisma.userBadge.findMany({
+    where: { userId },
+    include: { badge: true },
+    orderBy: { awardedAt: 'desc' },
+  });
+
+  const badges = userBadges.map((row) => ({
+    id: row.badge.id,
+    name: row.badge.name,
+    description: row.badge.description,
+    type: row.badge.type,
+    requirementValue: row.badge.requirementValue,
+    awardedAt: row.awardedAt,
+  }));
+
+  return { badges };
+}
+
 /**
  * Aggregate stats: total points, mission count, count of dangerous analyses, average risk over all analyses.
  */
@@ -71,6 +97,8 @@ async function getSummary(userId) {
   if (!user) {
     return null;
   }
+
+  await awardAgeBadges(user.id, user.age);
 
   const [totalMissions, dangerousCount, avgAgg] = await Promise.all([
     prisma.mission.count({ where: { userId } }),
@@ -91,17 +119,26 @@ async function getSummary(userId) {
       ? null
       : Number(avgAgg._avg.riskScore.toFixed(4));
 
+  const points = Number(user.points ?? 0);
+  const baseLevel = Math.floor(Math.sqrt(points / 100));
+  const level = baseLevel + 1;
+  const pointsToNextLevel = Math.max(0, 100 * (baseLevel + 1) ** 2 - points);
+
   return {
-    points: user.points,
+    points,
     totalMissions,
     dangerousCount,
     averageRiskScore,
+    level,
+    levelTitle: `Level ${level}`,
+    pointsToNextLevel,
   };
 }
 
 module.exports = {
   getHistory,
   getMissions,
+  getBadges,
   getSummary,
   DEFAULT_TAKE,
   MAX_TAKE,

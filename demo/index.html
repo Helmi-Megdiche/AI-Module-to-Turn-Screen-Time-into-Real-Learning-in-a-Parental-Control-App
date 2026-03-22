@@ -281,6 +281,40 @@
     table.missions-table tr:last-child td { border-bottom: none; }
     .status-completed { color: var(--accent); font-weight: 600; text-transform: capitalize; }
     .status-pending { color: var(--warn); font-weight: 600; text-transform: capitalize; }
+    .level-wrap { margin-top: 0.85rem; }
+    .level-progress {
+      width: 100%;
+      height: 10px;
+      background: #0f1412;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 0.45rem;
+    }
+    .level-progress > span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #2ea672 0%, var(--accent) 100%);
+      transition: width 0.25s ease;
+    }
+    .badges-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 0.8rem;
+      margin-top: 1rem;
+    }
+    .badge-card {
+      border: 1px solid var(--border);
+      background: #121a16;
+      border-radius: 8px;
+      padding: 0.75rem 0.8rem;
+    }
+    .badge-meta {
+      margin-top: 0.35rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
   </style>
 </head>
 <body>
@@ -298,6 +332,7 @@
     <div class="tab-bar" role="tablist" aria-label="Demo sections">
       <button class="tab-button active" type="button" data-tab="analyze">Analyze</button>
       <button class="tab-button" type="button" data-tab="summary">Summary</button>
+      <button class="tab-button" type="button" data-tab="badges">Badges</button>
       <button class="tab-button" type="button" data-tab="history">History</button>
       <button class="tab-button" type="button" data-tab="parent-missions">Parent: Missions</button>
     </div>
@@ -390,13 +425,32 @@
           <div class="card"><strong>Average risk</strong><br /><span id="sumAvg" class="metric-main">—</span><span id="sumAvgRaw" class="metric-sub">Raw score: —</span></div>
           <div class="card"><strong>Dangerous analyses</strong><br /><span id="sumDanger">—</span></div>
         </div>
+        <div class="level-wrap card">
+          <strong id="sumLevelTitle">Level —</strong>
+          <span class="metric-sub" id="sumPointsNext">Points to next level: —</span>
+          <div class="level-progress" aria-hidden="true"><span id="sumLevelBar"></span></div>
+        </div>
       </div>
     </section>
     </div>
 
+    <div id="badges" class="tab-content">
+      <section>
+        <h2>3 · Badges</h2>
+        <div class="actions">
+          <button type="button" class="secondary" id="btnBadges">
+            <span class="btn-label">Load badges</span>
+            <span class="btn-spinner" hidden aria-hidden="true"></span>
+          </button>
+        </div>
+        <div id="badgesErr" class="err" hidden></div>
+        <div id="badgesOut" class="badges-grid"></div>
+      </section>
+    </div>
+
     <div id="history" class="tab-content">
     <section>
-      <h2>3 · History</h2>
+      <h2>4 · History</h2>
       <div class="actions">
         <button type="button" class="secondary" id="btnHistory">
           <span class="btn-label">Load history</span>
@@ -422,7 +476,7 @@
 
     <div id="parent-missions" class="tab-content">
       <section>
-        <h2>4 · Parent: Missions</h2>
+        <h2>5 · Parent: Missions</h2>
         <div class="row">
           <div>
             <label for="parentUserId">User ID</label>
@@ -515,7 +569,7 @@
       el.textContent = msg;
     }
 
-    const ACTION_IDS = ["btnAnalyze", "btnClearImage", "btnSummary", "btnHistory", "btnLoadMissions"];
+    const ACTION_IDS = ["btnAnalyze", "btnClearImage", "btnSummary", "btnBadges", "btnHistory", "btnLoadMissions"];
 
     /** Toggle spinner + label on primary/secondary action buttons during fetch. */
     function setButtonLoading(btnId, loading, activeLabel, idleLabel) {
@@ -665,6 +719,23 @@
           $("sumAvgRaw").textContent = "Raw score: —";
         }
         $("sumDanger").textContent = s.dangerousCount != null ? s.dangerousCount : "—";
+        const displayLevel = Number.isFinite(Number(s.level)) ? Number(s.level) : null;
+        const title = typeof s.levelTitle === "string" && s.levelTitle ? s.levelTitle : (displayLevel != null ? "Level " + displayLevel : "Level —");
+        $("sumLevelTitle").textContent = title;
+        const points = Number(s.points ?? 0);
+        const nextGap = Number(s.pointsToNextLevel);
+        if (Number.isFinite(nextGap)) {
+          $("sumPointsNext").textContent = "Points to next level: " + nextGap;
+          const baseLevel = displayLevel != null ? Math.max(0, displayLevel - 1) : Math.floor(Math.sqrt(points / 100));
+          const currentThreshold = 100 * baseLevel * baseLevel;
+          const nextThreshold = 100 * (baseLevel + 1) * (baseLevel + 1);
+          const span = Math.max(1, nextThreshold - currentThreshold);
+          const progress = Math.max(0, Math.min(100, ((points - currentThreshold) / span) * 100));
+          $("sumLevelBar").style.width = progress.toFixed(1) + "%";
+        } else {
+          $("sumPointsNext").textContent = "Points to next level: —";
+          $("sumLevelBar").style.width = "0%";
+        }
         $("summaryOut").hidden = false;
       } catch (e) {
         showErr($("summaryErr"), e.message || String(e));
@@ -672,6 +743,44 @@
         stopElapsed();
         showLoadPanel("summaryLoad", false);
         setButtonLoading("btnSummary", false, "Loading…", "Load summary");
+        setActionsDisabled(false);
+      }
+    });
+
+    $("btnBadges").addEventListener("click", async () => {
+      showErr($("badgesErr"), "");
+      $("badgesOut").innerHTML = "";
+      setActionsDisabled(true);
+      setButtonLoading("btnBadges", true, "Loading…", "Load badges");
+      try {
+        const res = await fetch(apiBase() + "/api/user/" + uid() + "/badges");
+        const data = await readJsonSafe(res);
+        if (!res.ok) {
+          showErr($("badgesErr"), data.message || res.statusText);
+          return;
+        }
+        const badges = data.badges || [];
+        if (!badges.length) {
+          $("badgesOut").innerHTML = '<p class="muted">No badges earned yet.</p>';
+          return;
+        }
+        const cards = badges.map((b) => {
+          const awarded = b.awardedAt ? new Date(b.awardedAt).toLocaleString() : "—";
+          return (
+            '<div class="badge-card">' +
+            "<strong>" + escapeHtml(String(b.name || "Badge")) + "</strong>" +
+            '<div class="badge-meta">' + escapeHtml(String(b.description || "")) + "</div>" +
+            '<div class="badge-meta">Type: ' + escapeHtml(String(b.type || "")) + "</div>" +
+            '<div class="badge-meta">Requirement: ' + escapeHtml(String(b.requirementValue || "")) + "</div>" +
+            '<div class="badge-meta">Awarded: ' + escapeHtml(String(awarded)) + "</div>" +
+            "</div>"
+          );
+        });
+        $("badgesOut").innerHTML = cards.join("");
+      } catch (e) {
+        showErr($("badgesErr"), e.message || String(e));
+      } finally {
+        setButtonLoading("btnBadges", false, "Loading…", "Load badges");
         setActionsDisabled(false);
       }
     });

@@ -11,12 +11,14 @@ model User {
   id                Int        @id @default(autoincrement())
   age               Int
   points            Int        @default(0)
+  completedMissions Int        @default(0)
   lastSafeMissionAt DateTime?
   safePointsToday   Int        @default(0)
   lastSafeResetDate DateTime?
   createdAt         DateTime   @default(now())
   analyses          Analysis[]
   missions          Mission[]
+  userBadges        UserBadge[]
 }
 
 model Analysis {
@@ -40,4 +42,25 @@ model Mission {
   status    String   @default("pending")
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Badge {
+  id               Int        @id @default(autoincrement())
+  name             String     @unique
+  description      String
+  type             String
+  requirementValue String
+  createdAt        DateTime   @default(now())
+  userBadges       UserBadge[]
+}
+
+model UserBadge {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  badgeId   Int
+  awardedAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge     Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
 }
