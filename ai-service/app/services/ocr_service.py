@@ -49,7 +49,7 @@ def get_reader():
             torch.cuda.is_available(),
             cuda_ok,
         )
-        _reader = easyocr.Reader(["en"], gpu=cuda_ok)
+        _reader = easyocr.Reader(["en", "fr"], gpu=cuda_ok)
     return _reader
 
 
