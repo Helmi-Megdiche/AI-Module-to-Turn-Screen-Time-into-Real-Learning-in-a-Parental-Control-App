@@ -93,7 +93,7 @@ async def analyze(body: AnalyzeRequest):
         logger.exception("OCR failed")
         raise HTTPException(status_code=500, detail=f"OCR processing failed: {e}") from e
 
-    result = build_analyze_response_from_plain_text(text or "")
+    result = build_analyze_response_from_plain_text(text or "", pil)
 
     return AnalyzeResponse(
         text=result.text,

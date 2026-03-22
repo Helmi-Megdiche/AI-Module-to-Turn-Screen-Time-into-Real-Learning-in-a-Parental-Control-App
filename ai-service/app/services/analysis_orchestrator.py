@@ -9,8 +9,12 @@ single place that combines ``analyze_text`` + ``category_from_model_score``.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
-from app.services.moderation_service import analyze_text, category_from_model_score
+from PIL import Image
+
+from app.services import vision_service
+from app.services.moderation_service import category_from_model_score, moderate
 
 
 @dataclass(frozen=True)
@@ -24,14 +28,27 @@ class ScreenshotAnalysisResult:
     category: str
 
 
-def build_analyze_response_from_plain_text(raw: str) -> ScreenshotAnalysisResult:
-    """Run text moderation on OCR output (may be empty)."""
-    analysis = analyze_text(raw)
-    risk_score = analysis.risk_score
+def build_analyze_response_from_plain_text(
+    raw: str,
+    image: Optional[Image.Image] = None,
+) -> ScreenshotAnalysisResult:
+    """
+    Run text moderation and optional visual moderation, then merge them.
+
+    Final risk score uses the max of text and vision scores.
+    """
+    text_mod = moderate(raw)
+    vision_mod = vision_service.classify_image(image) if image is not None else {
+        "riskScore": 0.0,
+        "matchedKeywords": [],
+    }
+
+    risk_score = max(float(text_mod.risk_score), float(vision_mod["riskScore"]))
+    matched_keywords = text_mod.matched_keywords + list(vision_mod["matchedKeywords"])
     return ScreenshotAnalysisResult(
         text=raw,
-        display_text=analysis.display_text,
-        matched_keywords=analysis.matched_keywords,
-        risk_score=risk_score,
+        display_text=text_mod.display_text,
+        matched_keywords=matched_keywords,
+        risk_score=round(risk_score, 2),
         category=category_from_model_score(risk_score),
     )
