@@ -6,6 +6,10 @@
  */
 const prisma = require('../config/prisma');
 const aiService = require('./aiService');
+const {
+  SAFE_POINTS_COOLDOWN_MINUTES,
+  SAFE_POINTS_DAILY_CAP,
+} = require('../config');
 
 const EMPTY_ANALYSIS = {
   text: '',
@@ -88,6 +92,10 @@ function missionForRiskScore(riskScore) {
   return { mission: 'Go outside for 20 minutes', points: 10 };
 }
 
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 /**
  * Response shape when **no** rows are written — `analysis.id` is null, mission `status` is `preview`.
  */
@@ -128,6 +136,7 @@ async function runAnalyze({ userId, age, image }) {
   const { text, riskScore, category, usedAI, displayText, matchedKeywords } =
     analysis;
   const { mission, points } = missionForRiskScore(riskScore);
+  const awardImmediately = riskScore < 0.3;
 
   if (!hasProvidedImage(image)) {
     return buildPreviewAnalyzeResult({
@@ -171,12 +180,39 @@ async function runAnalyze({ userId, age, image }) {
       },
     });
 
-    const userUpdated = await tx.user.update({
-      where: { id: user.id },
-      data: {
-        points: { increment: points },
-      },
-    });
+    let userUpdated = user;
+    if (awardImmediately) {
+      const now = new Date();
+      const today = startOfDay(now);
+      const currentSafePointsToday = Number(user.safePointsToday ?? 0);
+      const needsDailyReset =
+        !user.lastSafeResetDate || user.lastSafeResetDate < today;
+      const safePointsToday = needsDailyReset ? 0 : currentSafePointsToday;
+      const cooldownMs = SAFE_POINTS_COOLDOWN_MINUTES * 60 * 1000;
+      const cooldownPassed =
+        !user.lastSafeMissionAt || now - user.lastSafeMissionAt >= cooldownMs;
+      const withinDailyCap = safePointsToday + points <= SAFE_POINTS_DAILY_CAP;
+      const shouldAward = cooldownPassed && withinDailyCap;
+
+      const userUpdateData = {};
+      if (needsDailyReset) {
+        userUpdateData.safePointsToday = 0;
+        userUpdateData.lastSafeResetDate = today;
+      }
+      if (shouldAward) {
+        userUpdateData.points = { increment: points };
+        userUpdateData.lastSafeMissionAt = now;
+        userUpdateData.safePointsToday = safePointsToday + points;
+        userUpdateData.lastSafeResetDate = today;
+      }
+
+      if (Object.keys(userUpdateData).length > 0) {
+        userUpdated = await tx.user.update({
+          where: { id: user.id },
+          data: userUpdateData,
+        });
+      }
+    }
 
     return { analysis, mission: missionRecord, user: userUpdated };
   });

@@ -27,6 +27,13 @@ async function completeMission(missionId, bonusPoints = 0) {
       data: { status: 'completed' },
     });
 
+    await tx.user.update({
+      where: { id: mission.userId },
+      data: {
+        points: { increment: mission.points },
+      },
+    });
+
     if (bonusPointsInt > 0) {
       await tx.user.update({
         where: { id: mission.userId },

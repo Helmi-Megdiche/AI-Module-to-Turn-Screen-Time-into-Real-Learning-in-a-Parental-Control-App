@@ -1,9 +1,14 @@
 jest.mock('../../config/prisma', () => ({
-  __esModule: true,
-  default: {},
+  $transaction: jest.fn(),
 }));
 
-const { missionForRiskScore } = require('../analyzeService');
+jest.mock('../aiService', () => ({
+  analyzeImage: jest.fn(),
+}));
+
+const prisma = require('../../config/prisma');
+const aiService = require('../aiService');
+const { missionForRiskScore, runAnalyze } = require('../analyzeService');
 
 describe('missionForRiskScore', () => {
   test('below 0.3 → continue mission, 2 points', () => {
@@ -41,5 +46,255 @@ describe('missionForRiskScore', () => {
       mission: 'Go outside for 20 minutes',
       points: 10,
     });
+  });
+});
+
+describe('runAnalyze safe-point controls', () => {
+  const now = new Date('2026-03-22T10:00:00.000Z');
+  const today = new Date('2026-03-22T00:00:00.000Z');
+  const sixMinutesAgo = new Date(now.getTime() - 6 * 60 * 1000);
+  const oneMinuteAgo = new Date(now.getTime() - 1 * 60 * 1000);
+  const yesterday = new Date('2026-03-21T00:00:00.000Z');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers().setSystemTime(now);
+    delete process.env.SAFE_POINTS_COOLDOWN_MINUTES;
+    delete process.env.SAFE_POINTS_DAILY_CAP;
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  function wireTransaction(tx) {
+    prisma.$transaction.mockImplementation(async (cb) => cb(tx));
+  }
+
+  function safeAiPayload() {
+    return {
+      text: 'all good',
+      displayText: 'all good',
+      matchedKeywords: [],
+      riskScore: 0.2,
+      category: 'safe',
+    };
+  }
+
+  function dangerousAiPayload() {
+    return {
+      text: 'dangerous text',
+      displayText: 'dangerous text',
+      matchedKeywords: ['violence'],
+      riskScore: 0.9,
+      category: 'dangerous',
+    };
+  }
+
+  test('first safe mission awards points and updates safe tracking fields', async () => {
+    aiService.analyzeImage.mockResolvedValue(safeAiPayload());
+
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 1,
+          age: 10,
+          points: 0,
+          lastSafeMissionAt: null,
+          safePointsToday: 0,
+          lastSafeResetDate: null,
+        }),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({
+          id: 1,
+          age: 10,
+          points: 2,
+          lastSafeMissionAt: now,
+          safePointsToday: 2,
+          lastSafeResetDate: today,
+        }),
+      },
+      analysis: { create: jest.fn().mockResolvedValue({ id: 10 }) },
+      mission: { create: jest.fn().mockResolvedValue({ id: 20 }) },
+    };
+    wireTransaction(tx);
+
+    await runAnalyze({ userId: 1, age: 10, image: 'abc' });
+
+    expect(tx.analysis.create).toHaveBeenCalledTimes(1);
+    expect(tx.mission.create).toHaveBeenCalledTimes(1);
+    expect(tx.user.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: expect.objectContaining({
+        points: { increment: 2 },
+        safePointsToday: 2,
+        lastSafeMissionAt: now,
+        lastSafeResetDate: expect.any(Date),
+      }),
+    });
+  });
+
+  test('second safe mission within cooldown does not award points', async () => {
+    aiService.analyzeImage.mockResolvedValue(safeAiPayload());
+
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 1,
+          age: 10,
+          points: 2,
+          lastSafeMissionAt: oneMinuteAgo,
+          safePointsToday: 2,
+          lastSafeResetDate: today,
+        }),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      analysis: { create: jest.fn().mockResolvedValue({ id: 11 }) },
+      mission: { create: jest.fn().mockResolvedValue({ id: 21 }) },
+    };
+    wireTransaction(tx);
+
+    await runAnalyze({ userId: 1, age: 10, image: 'abc' });
+
+    expect(tx.analysis.create).toHaveBeenCalledTimes(1);
+    expect(tx.mission.create).toHaveBeenCalledTimes(1);
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  test('safe mission after cooldown awards points again', async () => {
+    aiService.analyzeImage.mockResolvedValue(safeAiPayload());
+
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 1,
+          age: 10,
+          points: 2,
+          lastSafeMissionAt: sixMinutesAgo,
+          safePointsToday: 2,
+          lastSafeResetDate: today,
+        }),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({
+          id: 1,
+          age: 10,
+          points: 4,
+          lastSafeMissionAt: now,
+          safePointsToday: 4,
+          lastSafeResetDate: today,
+        }),
+      },
+      analysis: { create: jest.fn().mockResolvedValue({ id: 12 }) },
+      mission: { create: jest.fn().mockResolvedValue({ id: 22 }) },
+    };
+    wireTransaction(tx);
+
+    await runAnalyze({ userId: 1, age: 10, image: 'abc' });
+
+    expect(tx.user.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: expect.objectContaining({
+        points: { increment: 2 },
+        safePointsToday: 4,
+        lastSafeMissionAt: now,
+      }),
+    });
+  });
+
+  test('daily cap reached blocks safe point award until next reset', async () => {
+    aiService.analyzeImage.mockResolvedValue(safeAiPayload());
+
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 1,
+          age: 10,
+          points: 10,
+          lastSafeMissionAt: sixMinutesAgo,
+          safePointsToday: 10,
+          lastSafeResetDate: today,
+        }),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      analysis: { create: jest.fn().mockResolvedValue({ id: 13 }) },
+      mission: { create: jest.fn().mockResolvedValue({ id: 23 }) },
+    };
+    wireTransaction(tx);
+
+    await runAnalyze({ userId: 1, age: 10, image: 'abc' });
+
+    expect(tx.analysis.create).toHaveBeenCalledTimes(1);
+    expect(tx.mission.create).toHaveBeenCalledTimes(1);
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  test('safe mission on a new day resets daily counter and can award', async () => {
+    aiService.analyzeImage.mockResolvedValue(safeAiPayload());
+
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 1,
+          age: 10,
+          points: 10,
+          lastSafeMissionAt: null,
+          safePointsToday: 10,
+          lastSafeResetDate: yesterday,
+        }),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({
+          id: 1,
+          age: 10,
+          points: 12,
+          lastSafeMissionAt: now,
+          safePointsToday: 2,
+          lastSafeResetDate: today,
+        }),
+      },
+      analysis: { create: jest.fn().mockResolvedValue({ id: 14 }) },
+      mission: { create: jest.fn().mockResolvedValue({ id: 24 }) },
+    };
+    wireTransaction(tx);
+
+    await runAnalyze({ userId: 1, age: 10, image: 'abc' });
+
+    expect(tx.user.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: expect.objectContaining({
+        points: { increment: 2 },
+        safePointsToday: 2,
+        lastSafeResetDate: expect.any(Date),
+      }),
+    });
+  });
+
+  test('dangerous mission does not award immediate points', async () => {
+    aiService.analyzeImage.mockResolvedValue(dangerousAiPayload());
+
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 1,
+          age: 10,
+          points: 0,
+          lastSafeMissionAt: null,
+          safePointsToday: 0,
+          lastSafeResetDate: null,
+        }),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      analysis: { create: jest.fn().mockResolvedValue({ id: 15 }) },
+      mission: { create: jest.fn().mockResolvedValue({ id: 25 }) },
+    };
+    wireTransaction(tx);
+
+    await runAnalyze({ userId: 1, age: 10, image: 'abc' });
+
+    expect(tx.analysis.create).toHaveBeenCalledTimes(1);
+    expect(tx.mission.create).toHaveBeenCalledTimes(1);
+    expect(tx.user.update).not.toHaveBeenCalled();
   });
 });

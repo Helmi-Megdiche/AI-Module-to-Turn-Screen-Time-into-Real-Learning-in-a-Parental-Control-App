@@ -8,12 +8,15 @@ datasource db {
 }
 
 model User {
-  id        Int        @id @default(autoincrement())
-  age       Int
-  points    Int        @default(0)
-  createdAt DateTime   @default(now())
-  analyses  Analysis[]
-  missions  Mission[]
+  id                Int        @id @default(autoincrement())
+  age               Int
+  points            Int        @default(0)
+  lastSafeMissionAt DateTime?
+  safePointsToday   Int        @default(0)
+  lastSafeResetDate DateTime?
+  createdAt         DateTime   @default(now())
+  analyses          Analysis[]
+  missions          Mission[]
 }
 
 model Analysis {
