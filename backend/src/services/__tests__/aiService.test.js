@@ -29,7 +29,7 @@ describe('analyzeImage', () => {
       'http://127.0.0.1:8000/analyze',
       { image: '  abcd  ' },
       expect.objectContaining({
-        timeout: 10_000,
+        timeout: 120_000,
         headers: { 'Content-Type': 'application/json' },
       })
     );

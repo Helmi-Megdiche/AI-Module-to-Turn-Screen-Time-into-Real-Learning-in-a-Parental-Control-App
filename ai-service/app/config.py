@@ -1,4 +1,9 @@
-"""Configuration for local moderation and calibration."""
+"""
+Central tuning knobs for the **zero-shot moderation** stack.
+
+All thresholds can be overridden with environment variables (``MODERATION_*``) so you can
+calibrate without editing code. Defaults match the PFE thesis calibration.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +11,7 @@ import os
 
 
 def _float_env(name: str, default: float) -> float:
+    """Read ``float(os.environ[name])`` or return ``default`` if unset/invalid."""
     raw = os.getenv(name)
     if raw is None:
         return default
@@ -16,6 +22,7 @@ def _float_env(name: str, default: float) -> float:
 
 
 def _int_env(name: str, default: int) -> int:
+    """Read ``int(os.environ[name])`` or return ``default`` if unset/invalid."""
     raw = os.getenv(name)
     if raw is None:
         return default

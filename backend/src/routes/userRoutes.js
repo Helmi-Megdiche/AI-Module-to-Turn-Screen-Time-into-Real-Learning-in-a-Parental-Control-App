@@ -1,3 +1,4 @@
+/** `GET /api/user/:id/history|missions|summary` — `:id` is the child profile id. */
 const express = require('express');
 const userController = require('../controllers/userController');
 

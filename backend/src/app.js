@@ -1,3 +1,7 @@
+/**
+ * Express application factory: middleware + `/api` router.
+ * All JSON APIs live under `/api/*` (see `routes/index.js`).
+ */
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');

@@ -1,3 +1,7 @@
+/**
+ * Single Prisma client instance for the whole Node process.
+ * In development, reuses the same client across hot-reloads to avoid connection exhaustion.
+ */
 const { PrismaClient } = require('@prisma/client');
 
 const globalForPrisma = globalThis;

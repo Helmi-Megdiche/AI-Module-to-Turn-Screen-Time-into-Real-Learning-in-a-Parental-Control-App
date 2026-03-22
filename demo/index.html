@@ -242,6 +242,11 @@
   </style>
 </head>
 <body>
+  <!--
+    Jury demo (static HTML, no bundler). User points the "API base" at the Node backend (default :3000).
+    Section 1: POST /api/analyze with optional screenshot as raw base64.
+    Sections 2–3: GET /api/user/:id/summary and /history for the same User ID.
+  -->
   <div class="wrap">
     <header>
       <h1>Parental control — jury demo</h1>
@@ -362,11 +367,17 @@
   </div>
 
   <script>
+    /**
+     * Browser-side demo logic only. Expects the Express API (CORS + JSON) on apiBase.
+     * imageB64: raw base64 without data: URL prefix — matches backend/AI contract.
+     */
     const $ = (id) => document.getElementById(id);
 
+    /** Backend root URL from the "Connection" field (trailing slash stripped). */
     function apiBase() {
       return $("apiBase").value.replace(/\/$/, "");
     }
+    /** Child profile id — must match the user you analyze and query history for. */
     function uid() {
       return parseInt($("userId").value, 10);
     }
@@ -394,6 +405,7 @@
       imageB64 = null;
     });
 
+    /** Show inline error text, or hide the error element when msg is empty. */
     function showErr(el, msg) {
       if (!msg) {
         el.hidden = true;
@@ -406,6 +418,7 @@
 
     const ACTION_IDS = ["btnAnalyze", "btnClearImage", "btnSummary", "btnHistory"];
 
+    /** Toggle spinner + label on primary/secondary action buttons during fetch. */
     function setButtonLoading(btnId, loading, activeLabel, idleLabel) {
       const btn = $(btnId);
       const label = btn.querySelector(".btn-label");
@@ -415,6 +428,7 @@
       if (spin) spin.hidden = !loading;
     }
 
+    /** Disable all main actions while a long request is in flight (avoid double submit). */
     function setActionsDisabled(disabled) {
       ACTION_IDS.forEach((id) => {
         $(id).disabled = disabled;
@@ -434,11 +448,13 @@
       return () => clearInterval(id);
     }
 
+    /** Show or hide the loading strip + spinner for a section (accessibility: aria-hidden). */
     function showLoadPanel(panelId, show) {
       const p = $(panelId);
       p.setAttribute("aria-hidden", show ? "false" : "true");
     }
 
+    /** Format backend average risk (0–1) as a percentage string for the summary card. */
     function formatPercent(value) {
       const n = Number(value);
       if (!Number.isFinite(n)) return "—";
@@ -463,6 +479,7 @@
       }
     }
 
+    /** Small colored badge HTML for safe / risky / dangerous. */
     function categoryPill(cat) {
       const c = (cat || "").toLowerCase();
       if (c === "safe") return '<span class="pill safe">safe</span>';
@@ -636,6 +653,7 @@
       }
     });
 
+    /** Escape HTML when injecting user/API text into innerHTML lists. */
     function escapeHtml(s) {
       return s
         .replace(/&/g, "&amp;")

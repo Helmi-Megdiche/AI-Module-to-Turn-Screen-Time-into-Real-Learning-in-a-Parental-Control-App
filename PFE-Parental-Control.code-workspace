@@ -1,0 +1,12 @@
+{
+  "folders": [
+    {
+      "path": ".",
+      "name": "PFE Parental Control (OneDrive)"
+    }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "${workspaceFolder}/ai-service/.venv/Scripts/python.exe",
+    "python.terminal.activateEnvironment": true
+  }
+}

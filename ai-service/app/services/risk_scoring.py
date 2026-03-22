@@ -1,4 +1,17 @@
-"""Context-aware risk scoring that stays deterministic for the demo."""
+"""
+Rule-based **fallback** risk scoring when the transformer is unavailable or OCR is unusable.
+
+Each ``SignalRule`` combines:
+
+- **aliases** — vocabulary that can match OCR tokens (with fuzzy edit distance),
+- optional **context** words that must appear nearby,
+- optional **regex patterns** for high-precision phrases,
+- a **weight** folded into ``compute_risk_score``.
+
+This module stays **deterministic** (no network) so demos and unit tests are reproducible.
+The coarse ``category_from_score`` thresholds here differ from ``config.py`` — the HTTP API uses
+``moderation_service.category_from_model_score`` for the final label.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +22,8 @@ import re
 
 @dataclass(frozen=True)
 class SignalRule:
+    """One interpretable risk signal (e.g. self-harm, hate speech) with matching logic."""
+
     label: str
     weight: float
     aliases: tuple[str, ...] = ()
@@ -19,11 +34,14 @@ class SignalRule:
 
 @dataclass(frozen=True)
 class RiskAnalysis:
+    """Lightweight result type shared with ``moderation_service.analyze_text``."""
+
     matched_keywords: list[str]
     risk_score: float
     display_text: str
 
 
+# Ordered list of rules evaluated independently; multiple can fire on one string.
 SIGNAL_RULES: tuple[SignalRule, ...] = (
     SignalRule(
         label="self-harm",
@@ -175,10 +193,12 @@ def _max_edits_allowed(keyword: str) -> int:
 
 
 def _tokens(text: str) -> list[str]:
+    """Lowercase alphanumeric tokens — basis for fuzzy keyword search."""
     return re.findall(r"[a-z0-9]+", text.lower())
 
 
 def _token_matches_keyword(token_lower: str, kw: str) -> bool:
+    """Exact match or small Levenshtein distance for OCR typos."""
     if token_lower == kw:
         return True
 
@@ -189,12 +209,14 @@ def _token_matches_keyword(token_lower: str, kw: str) -> bool:
 
 
 def _keyword_hit_in_text(lowered: str, kw: str) -> bool:
+    """Substring or fuzzy token hit — helper for rare call sites."""
     if kw in lowered:
         return True
     return any(_token_matches_keyword(token, kw) for token in _tokens(lowered))
 
 
 def _match_indexes(tokens: list[str], candidates: tuple[str, ...]) -> list[int]:
+    """Indices of tokens that fuzzy-match any candidate keyword."""
     if not candidates:
         return []
     out: list[int] = []
@@ -205,6 +227,7 @@ def _match_indexes(tokens: list[str], candidates: tuple[str, ...]) -> list[int]:
 
 
 def _has_context_nearby(tokens: list[str], anchors: tuple[str, ...], context: tuple[str, ...], window: int) -> bool:
+    """True when an anchor token and a context token appear within ``window`` tokens of each other."""
     anchor_indexes = _match_indexes(tokens, anchors)
     if not anchor_indexes:
         return False
@@ -215,6 +238,7 @@ def _has_context_nearby(tokens: list[str], anchors: tuple[str, ...], context: tu
 
 
 def _rule_matches(lowered: str, tokens: list[str], rule: SignalRule) -> bool:
+    """Dispatch: regex win > alias-only > alias+context proximity."""
     if any(re.search(pattern, lowered) for pattern in rule.patterns):
         return True
     if rule.aliases and not rule.context and _match_indexes(tokens, rule.aliases):
@@ -232,14 +256,40 @@ def _canonical_for_token(token_lower: str) -> str | None:
     return None
 
 
+def _matched_labels_and_weights(lowered: str, tokens: list[str]) -> tuple[list[str], list[float]]:
+    """Labels that fired and their weights, in ``SIGNAL_RULES`` order."""
+    matches = [rule.label for rule in SIGNAL_RULES if _rule_matches(lowered, tokens, rule)]
+    weights = [rule.weight for rule in SIGNAL_RULES if rule.label in matches]
+    return matches, weights
+
+
+def _format_canonical_casing(original_word: str, canonical: str) -> str:
+    """Preserve rough casing when swapping OCR tokens for canonical keywords."""
+    if original_word.isupper():
+        return canonical.upper()
+    if original_word[0].isupper():
+        return canonical.capitalize()
+    return canonical
+
+
+def _replace_token_for_display(m: re.Match[str]) -> str:
+    """Regex callback: one alphanumeric token → canonical keyword if fuzzy-matched."""
+    word = m.group(0)
+    tl = word.lower()
+    canon = _canonical_for_token(tl)
+    if canon is None:
+        return word
+    return _format_canonical_casing(word, canon)
+
+
 def analyze_text(text: str) -> RiskAnalysis:
+    """Run all rules, aggregate weights into a risk score, build parent-facing ``display_text``."""
     if not text or not text.strip():
         return RiskAnalysis(matched_keywords=[], risk_score=0.0, display_text="")
 
     lowered = text.lower()
     tokens = _tokens(lowered)
-    matches = [rule.label for rule in SIGNAL_RULES if _rule_matches(lowered, tokens, rule)]
-    weights = [rule.weight for rule in SIGNAL_RULES if rule.label in matches]
+    matches, weights = _matched_labels_and_weights(lowered, tokens)
     risk_score = compute_risk_score(weights, matches)
     return RiskAnalysis(
         matched_keywords=matches,
@@ -278,6 +328,7 @@ def build_display_text(raw: str) -> str:
 
 
 def count_keyword_hits(text: str) -> int:
+    """Convenience counter — not used on the hot HTTP path."""
     return len(matched_keywords(text))
 
 
@@ -306,6 +357,7 @@ def compute_risk_score(weights: list[float], labels: list[str] | None = None) ->
 
 
 def category_from_score(risk_score: float) -> str:
+    """Legacy three-band label for **rule-only** scores (not the same thresholds as ``config.py``)."""
     if risk_score < 0.25:
         return "safe"
     if risk_score < 0.65:

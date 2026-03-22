@@ -44,6 +44,8 @@ The design prioritises **local execution on CPU** (no paid cloud inference requi
 
 ## 2. High-level architecture
 
+**Computer vision scope:** The product uses **screenshot → text** via **EasyOCR** (text detection + recognition on image pixels). There is **no** separate CNN/transformer **image classifier** for scenes or objects; the only “vision” stage is OCR. All policy and risk logic runs on **strings** (zero-shot NLI + deterministic fallback rules).
+
 ```mermaid
 flowchart TB
   subgraph clients
@@ -338,7 +340,21 @@ So a **dangerous** category with score **0.98** always receives the **20-minute 
 
 ---
 
-## 10. References
+## 10. Code structure and maintainability
+
+This codebase is **layered and teachable**, not “spaghetti”: Express uses **routes → controllers → services**; the AI service keeps **HTTP (`main.py`)**, **OCR**, **moderation**, and **rule fallback** in separate modules with **config** and **utils** split out.
+
+**Minor considerations (normal for a PFE scope):**
+
+- `risk_scoring.py` and `moderation_service.py` are **large**; future work can extract **small pure functions** or submodules without changing behaviour.
+- The moderation pipeline uses **module-level** classifier and degraded state — appropriate for a single-process API; **tests** rely on mocks / monkeypatch as documented in `TESTING.md`.
+- Per-request **timing spam** was removed from default logs; **inference latency** for the transformer path remains on ``ModerationResult.inference_ms`` for offline eval and debugging.
+
+**Polish:** keep `main.py` thin; prefer pure helpers for new rules; run and document tests per `TESTING.md`.
+
+---
+
+## 11. References
 
 - Model card (Hugging Face): [MoritzLaurer/mDeBERTa-v3-base-mnli-xnli](https://huggingface.co/MoritzLaurer/mDeBERTa-v3-base-mnli-xnli)  
 - Transformers zero-shot classification: [Hugging Face pipelines documentation](https://huggingface.co/docs/transformers/main_classes/pipelines#transformers.pipeline)  

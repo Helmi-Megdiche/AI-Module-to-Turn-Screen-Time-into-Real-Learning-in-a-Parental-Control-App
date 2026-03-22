@@ -1,4 +1,8 @@
-"""Decode incoming base64 payloads into a PIL image."""
+"""
+Helpers to turn browser/Node base64 strings into RGB ``PIL.Image`` objects for OCR.
+
+Accepts either raw base64 or a full ``data:image/...;base64,...`` data URL.
+"""
 
 import base64
 import io
@@ -19,6 +23,7 @@ def _normalize_base64(image_b64: str) -> str:
 
 
 def base64_to_pil(image_b64: str) -> Image.Image:
+    """Decode, open with Pillow, and convert to RGB (EasyOCR expects a consistent mode)."""
     normalized = _normalize_base64(image_b64)
     # validate=True catches garbage early; padding fix above fixes most paste issues
     raw = base64.b64decode(normalized, validate=True)

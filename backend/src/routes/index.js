@@ -1,3 +1,9 @@
+/**
+ * Central API router mounted at `/api` in `app.js`.
+ * - `/api/health` — liveness
+ * - `/api/analyze` — screenshot analysis
+ * - `/api/user` — history / missions / summary
+ */
 const express = require('express');
 const healthRoutes = require('./healthRoutes');
 const analyzeRoutes = require('./analyzeRoutes');

@@ -2,6 +2,24 @@
 
 This repo uses **fast automated checks** on every commit (optional **Husky** hook) and a **slower full moderation evaluation** before important milestones.
 
+## Happy Path Walkthrough (manual)
+
+**Prerequisites:** PostgreSQL running; `backend/.env` has `DATABASE_URL` and `AI_ANALYZE_URL=http://127.0.0.1:8000/analyze`; Prisma migrated (`npx prisma migrate deploy` or `db push` from `backend/`).
+
+1. **Start AI service** (from `ai-service/` with `.venv`):  
+   `python -m uvicorn app.main:app --host 127.0.0.1 --port 8000` or `.\run-dev.ps1`  
+2. **Start backend:** `cd backend && npm run dev`  
+3. **Serve demo UI:** e.g. `npx serve -l 5173` from `demo/` (or repo root pointing at `demo`).  
+4. Open the demo URL, set **API base** to `http://localhost:3000`, **User id** to an existing user (e.g. `1`), and a plausible **age**.
+
+5. **Safe path:** Upload a neutral screenshot (e.g. plain UI text or a harmless quote). Click **Run analyze**. Expect **low risk**, category **`safe`**, and a **low-points** mission (e.g. “Continue your activity responsibly”).  
+6. **High-risk path:** Upload a screenshot whose OCR text matches hate/threat content (or use a test image from your PFE set). Expect **high risk**, category **`dangerous`** or **`risky`**, and a **stronger** mission (e.g. break / go outside).  
+7. **History & summary:** Click **Load history** — new rows should appear; **Load summary** — total points and counts should reflect the missions you triggered.
+
+**Regression check:** From repo root, run **`npm test`** before commits; before milestones run **`npm run test:full`**.
+
+For a compact checklist, see **`TECHNICAL_REPORT.md` §9 — Operational checklist (local demo)**.
+
 ## What runs
 
 | Layer | Command | What it does |
@@ -13,7 +31,7 @@ This repo uses **fast automated checks** on every commit (optional **Husky** hoo
 
 ## One-shot runner (recommended)
 
-From the **repository root** (`sez/`):
+From the **repository root**:
 
 ```bash
 # Fast: Jest + pytest (no model load)

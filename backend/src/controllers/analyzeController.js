@@ -1,5 +1,10 @@
+/**
+ * HTTP handlers for `POST /api/analyze`.
+ * Validates body (`userId`, `age`, optional `image` base64) and delegates to `analyzeService.runAnalyze`.
+ */
 const analyzeService = require('../services/analyzeService');
 
+/** @param {unknown} value - from JSON body */
 function parsePositiveInt(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
@@ -8,6 +13,7 @@ function parsePositiveInt(value) {
   return n;
 }
 
+/** @param {unknown} value - e.g. child age */
 function parseNonNegativeInt(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
@@ -16,6 +22,11 @@ function parseNonNegativeInt(value) {
   return n;
 }
 
+/**
+ * Runs screenshot analysis: calls Python AI when `image` is present, else returns a safe preview without DB write.
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ */
 async function postAnalyze(req, res) {
   try {
     const userId = parsePositiveInt(req.body.userId);

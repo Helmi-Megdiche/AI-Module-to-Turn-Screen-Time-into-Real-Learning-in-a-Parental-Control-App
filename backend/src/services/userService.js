@@ -1,3 +1,6 @@
+/**
+ * Database reads for the “parent dashboard”: paginated analyses/missions and roll-up summary stats.
+ */
 const prisma = require('../config/prisma');
 
 const DEFAULT_TAKE = 20;
@@ -14,6 +17,7 @@ async function getUserById(userId) {
   return prisma.user.findUnique({ where: { id: userId } });
 }
 
+/** Returns analyses + missions for the user, newest first. `null` if user does not exist. */
 async function getHistory(userId, pagination) {
   const user = await getUserById(userId);
   if (!user) {
@@ -40,6 +44,7 @@ async function getHistory(userId, pagination) {
   return { analyses, missions, skip, take };
 }
 
+/** Missions only — same pagination as history. */
 async function getMissions(userId, pagination) {
   const user = await getUserById(userId);
   if (!user) {
@@ -58,6 +63,9 @@ async function getMissions(userId, pagination) {
   return { missions, skip, take };
 }
 
+/**
+ * Aggregate stats: total points, mission count, count of dangerous analyses, average risk over all analyses.
+ */
 async function getSummary(userId) {
   const user = await getUserById(userId);
   if (!user) {

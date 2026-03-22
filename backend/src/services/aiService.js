@@ -1,12 +1,18 @@
+/**
+ * Thin HTTP client for the Python AI microservice (`POST /analyze`).
+ * URL and timeout come from `AI_ANALYZE_URL` and `AI_REQUEST_TIMEOUT_MS` in `.env`.
+ */
 const axios = require('axios');
 
 const DEFAULT_AI_ANALYZE_URL = 'http://127.0.0.1:8000/analyze';
-const DEFAULT_AI_REQUEST_TIMEOUT_MS = 10_000;
+/** OCR + zero-shot moderation on CPU often exceeds 10s; keep in sync with `.env.example`. */
+const DEFAULT_AI_REQUEST_TIMEOUT_MS = 120_000;
 
 function getAiAnalyzeUrl() {
   return process.env.AI_ANALYZE_URL || DEFAULT_AI_ANALYZE_URL;
 }
 
+/** Milliseconds for axios; invalid env falls back to default. */
 function getAiRequestTimeoutMs() {
   const raw = process.env.AI_REQUEST_TIMEOUT_MS;
   if (raw === undefined || raw === '') {
@@ -19,6 +25,10 @@ function getAiRequestTimeoutMs() {
   return n;
 }
 
+/**
+ * Sends raw Base64 (no `data:` prefix) to the AI service; returns `{ text, displayText, matchedKeywords, riskScore, category }`.
+ * @throws {Error} on network failure or non-2xx — message includes HTTP status when available.
+ */
 async function analyzeImage(imageBase64) {
   const url = getAiAnalyzeUrl();
   const timeout = getAiRequestTimeoutMs();

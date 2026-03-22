@@ -1,3 +1,7 @@
+/**
+ * Read-only user endpoints: history (analyses + missions), missions list, aggregated summary.
+ * URL shape: `/api/user/:id/...` — `id` must be a positive integer (same id clients send to `/analyze`).
+ */
 const userService = require('../services/userService');
 
 function parsePositiveInt(value) {
@@ -8,6 +12,7 @@ function parsePositiveInt(value) {
   return n;
 }
 
+/** Parse `skip` query (pagination offset). */
 function parseSkip(value) {
   if (value === undefined || value === '' || value === null) {
     return 0;
@@ -19,6 +24,7 @@ function parseSkip(value) {
   return n;
 }
 
+/** Parse `take` query (page size), capped by `userService.MAX_TAKE`. */
 function parseTake(value) {
   if (value === undefined || value === '' || value === null) {
     return userService.DEFAULT_TAKE;
@@ -30,6 +36,7 @@ function parseTake(value) {
   return Math.min(n, userService.MAX_TAKE);
 }
 
+/** Reads `:id` from route; responds 400 and returns null if invalid. */
 function getUserIdOr400(req, res) {
   const userId = parsePositiveInt(req.params.id);
   if (userId === null) {
@@ -42,6 +49,7 @@ function getUserIdOr400(req, res) {
   return userId;
 }
 
+/** Validates `skip` / `take` query params together. */
 function getPaginationOr400(req, res) {
   const skip = parseSkip(req.query.skip);
   if (skip === null) {
@@ -64,6 +72,7 @@ function getPaginationOr400(req, res) {
   return { skip, take };
 }
 
+/** `GET /api/user/:id/history` — recent analyses and missions side by side. */
 async function getHistory(req, res) {
   try {
     const userId = getUserIdOr400(req, res);
@@ -104,6 +113,7 @@ async function getHistory(req, res) {
   }
 }
 
+/** `GET /api/user/:id/missions` — mission rows only. */
 async function getMissions(req, res) {
   try {
     const userId = getUserIdOr400(req, res);
@@ -143,6 +153,7 @@ async function getMissions(req, res) {
   }
 }
 
+/** `GET /api/user/:id/summary` — points, counts, average risk, dangerous analyses count. */
 async function getSummary(req, res) {
   try {
     const userId = getUserIdOr400(req, res);
