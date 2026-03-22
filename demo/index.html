@@ -239,6 +239,48 @@
       color: var(--muted);
       font-size: 0.78rem;
     }
+    .tab-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      margin-bottom: 1rem;
+    }
+    .tab-button {
+      background: var(--surface);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      box-shadow: none;
+    }
+    .tab-button:hover { color: var(--text); border-color: var(--accent); filter: none; }
+    .tab-button.active {
+      background: linear-gradient(180deg, #4ae89a 0%, var(--accent) 100%);
+      color: #062015;
+      border-color: transparent;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .missions-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #121a16;
+    }
+    table.missions-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+    }
+    table.missions-table th,
+    table.missions-table td {
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      padding: 0.65rem 0.75rem;
+      vertical-align: middle;
+    }
+    table.missions-table th { color: var(--muted); font-weight: 600; }
+    table.missions-table tr:last-child td { border-bottom: none; }
+    .status-completed { color: var(--accent); font-weight: 600; text-transform: capitalize; }
+    .status-pending { color: var(--warn); font-weight: 600; text-transform: capitalize; }
   </style>
 </head>
 <body>
@@ -252,6 +294,13 @@
       <h1>Parental control — jury demo</h1>
       <p class="tagline">Analyze · missions · history · summary (calls your real API)</p>
     </header>
+
+    <div class="tab-bar" role="tablist" aria-label="Demo sections">
+      <button class="tab-button active" type="button" data-tab="analyze">Analyze</button>
+      <button class="tab-button" type="button" data-tab="summary">Summary</button>
+      <button class="tab-button" type="button" data-tab="history">History</button>
+      <button class="tab-button" type="button" data-tab="parent-missions">Parent: Missions</button>
+    </div>
 
     <section>
       <h2>Connection</h2>
@@ -272,6 +321,7 @@
       <p class="hint">Start the backend (<code>npm run dev</code> in <code>backend/</code>). API URL must be <strong>:3000</strong> (not the demo page port). Large <strong>JPG</strong> files need a bigger JSON limit — backend uses <strong>15MB</strong>. For real OCR, run the AI service on port 8000.</p>
     </section>
 
+    <div id="analyze" class="tab-content active">
     <section>
       <h2>1 · Analyze</h2>
       <p class="muted" style="margin-top:0">Send a screenshot as base64. Leave empty to run a neutral no-image analysis result.</p>
@@ -315,7 +365,9 @@
         <pre id="outRaw"></pre>
       </div>
     </section>
+    </div>
 
+    <div id="summary" class="tab-content">
     <section>
       <h2>2 · Summary</h2>
       <div class="actions">
@@ -340,7 +392,9 @@
         </div>
       </div>
     </section>
+    </div>
 
+    <div id="history" class="tab-content">
     <section>
       <h2>3 · History</h2>
       <div class="actions">
@@ -364,6 +418,31 @@
         <ul class="history" id="listMissions"></ul>
       </div>
     </section>
+    </div>
+
+    <div id="parent-missions" class="tab-content">
+      <section>
+        <h2>4 · Parent: Missions</h2>
+        <div class="row">
+          <div>
+            <label for="parentUserId">User ID</label>
+            <input id="parentUserId" type="number" min="1" value="1" />
+          </div>
+          <div>
+            <label for="missionBonus">Bonus points (optional)</label>
+            <input id="missionBonus" type="number" min="0" value="0" />
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" class="secondary" id="btnLoadMissions">
+            <span class="btn-label">Load missions</span>
+            <span class="btn-spinner" hidden aria-hidden="true"></span>
+          </button>
+        </div>
+        <div id="missionsErr" class="err" hidden></div>
+        <div id="missionsList" style="margin-top:1rem"></div>
+      </section>
+    </div>
   </div>
 
   <script>
@@ -381,11 +460,31 @@
     function uid() {
       return parseInt($("userId").value, 10);
     }
+    function parentUid() {
+      return parseInt($("parentUserId").value, 10);
+    }
     function ageVal() {
       return parseInt($("age").value, 10);
     }
+    function bonusVal() {
+      const n = parseInt($("missionBonus").value, 10);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    }
 
     let imageB64 = null;
+
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-content").forEach((el) => {
+        el.classList.toggle("active", el.id === tabId);
+      });
+      document.querySelectorAll(".tab-button").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.tab === tabId);
+      });
+    }
+
+    document.querySelectorAll(".tab-button").forEach((btn) => {
+      btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+    });
 
     $("file").addEventListener("change", async (e) => {
       const f = e.target.files && e.target.files[0];
@@ -416,7 +515,7 @@
       el.textContent = msg;
     }
 
-    const ACTION_IDS = ["btnAnalyze", "btnClearImage", "btnSummary", "btnHistory"];
+    const ACTION_IDS = ["btnAnalyze", "btnClearImage", "btnSummary", "btnHistory", "btnLoadMissions"];
 
     /** Toggle spinner + label on primary/secondary action buttons during fetch. */
     function setButtonLoading(btnId, loading, activeLabel, idleLabel) {
@@ -650,6 +749,122 @@
         showLoadPanel("historyLoad", false);
         setButtonLoading("btnHistory", false, "Loading…", "Load history");
         setActionsDisabled(false);
+      }
+    });
+
+    function missionActionCell(row) {
+      if (String(row.status).toLowerCase() !== "pending") {
+        return '<span class="muted">—</span>';
+      }
+      return (
+        '<button type="button" class="secondary validateBtn" data-id="' +
+        row.id +
+        '">Validate</button>'
+      );
+    }
+
+    function missionStatusCell(status) {
+      const s = String(status || "").toLowerCase();
+      if (s === "completed") return '<span class="status-completed">completed</span>';
+      if (s === "pending") return '<span class="status-pending">pending</span>';
+      return escapeHtml(String(status || "—"));
+    }
+
+    function renderMissionsTable(missions) {
+      const list = $("missionsList");
+      if (!missions.length) {
+        list.innerHTML = '<p class="muted">No missions found for this user.</p>';
+        return;
+      }
+
+      const rows = missions
+        .map((row) => {
+          return (
+            "<tr>" +
+            "<td>" +
+            escapeHtml(row.mission || "") +
+            "</td>" +
+            "<td>" +
+            Number(row.points || 0) +
+            "</td>" +
+            "<td>" +
+            missionStatusCell(row.status) +
+            "</td>" +
+            "<td>" +
+            missionActionCell(row) +
+            "</td>" +
+            "</tr>"
+          );
+        })
+        .join("");
+
+      list.innerHTML =
+        '<div class="missions-table-wrap">' +
+        '<table class="missions-table">' +
+        "<thead><tr><th>Mission</th><th>Points</th><th>Status</th><th>Action</th></tr></thead>" +
+        "<tbody>" +
+        rows +
+        "</tbody></table></div>";
+    }
+
+    async function loadMissions() {
+      showErr($("missionsErr"), "");
+      $("missionsList").innerHTML = "";
+      setButtonLoading("btnLoadMissions", true, "Loading…", "Load missions");
+      $("btnLoadMissions").disabled = true;
+
+      try {
+        const id = parentUid();
+        if (!Number.isFinite(id) || id <= 0) {
+          showErr($("missionsErr"), "Please enter a valid User ID.");
+          return;
+        }
+
+        const res = await fetch(
+          apiBase() + "/api/user/" + id + "/missions?take=100&skip=0"
+        );
+        const data = await readJsonSafe(res);
+        if (!res.ok) {
+          showErr($("missionsErr"), data.message || res.statusText);
+          return;
+        }
+
+        renderMissionsTable(data.missions || []);
+      } catch (e) {
+        showErr($("missionsErr"), e.message || String(e));
+      } finally {
+        setButtonLoading("btnLoadMissions", false, "Loading…", "Load missions");
+        $("btnLoadMissions").disabled = false;
+      }
+    }
+
+    $("btnLoadMissions").addEventListener("click", loadMissions);
+
+    $("missionsList").addEventListener("click", async (e) => {
+      const btn = e.target.closest(".validateBtn");
+      if (!btn) return;
+
+      const missionId = Number(btn.dataset.id);
+      if (!Number.isFinite(missionId) || missionId <= 0) return;
+
+      btn.disabled = true;
+      try {
+        const res = await fetch(apiBase() + "/api/mission/" + missionId + "/complete", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bonusPoints: bonusVal() }),
+        });
+        const data = await readJsonSafe(res);
+        if (!res.ok) {
+          alert(data.message || "Failed to validate mission.");
+          return;
+        }
+        alert("Mission validated!");
+        await loadMissions();
+      } catch (err) {
+        alert(err.message || String(err));
+      } finally {
+        btn.disabled = false;
       }
     });
 
