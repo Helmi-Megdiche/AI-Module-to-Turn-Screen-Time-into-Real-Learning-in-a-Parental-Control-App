@@ -21,6 +21,7 @@ flowchart LR
     AI -->|OCR + moderation result| BE
     BE -->|persist analysis + mission| DB[(PostgreSQL)]
     UI -->|GET summary/history/missions/badges| BE
+    UI -->|POST /api/mission/result| BE
     UI -->|PUT /api/mission/:id/complete| BE
     BE -->|update points, completed missions, badges| DB
 ```
@@ -43,10 +44,11 @@ flowchart LR
    - optional visual NSFW moderation
 5. AI result is normalized to:
    - `text`, `displayText`, `matchedKeywords`, `riskScore`, `category`
-6. Backend creates `Analysis` + `Mission`.
+6. Backend creates `Analysis` + `Mission` (legacy text + optional structured interactive content).
 7. Points logic:
-   - safe missions (`riskScore < 0.3`): immediate points only if cooldown + daily cap allow it
-   - risky/dangerous missions (`riskScore >= 0.3`): points awarded only when parent validates mission
+   - safe `real_world` missions (`riskScore < 0.3`): immediate points only if cooldown + daily cap allow it
+   - interactive missions (`quiz`, `puzzle`, `mini_game`): points awarded via `POST /api/mission/result` using `base + bonus`
+   - parent completion endpoint keeps `completedMissions` logic and avoids double-point award for interactive missions
 8. Badge logic runs on point, mission-completion, and age conditions.
 9. Parent dashboard endpoints expose history, missions, summary, and earned badges.
 
@@ -71,10 +73,13 @@ flowchart LR
 Main file: `backend/src/services/analyzeService.js`
 
 - validates and normalizes AI payload
-- mission bands:
-  - `< 0.3`: `"Continue your activity responsibly"`, `2 points`
-  - `0.3 - 0.7`: `"Take a 10-minute break"`, `5 points`
-  - `> 0.7`: `"Go outside for 20 minutes"`, `10 points`
+- mission generation:
+  - `real_world` for low risk
+  - `puzzle` for medium risk
+  - `quiz` / `mini_game` for dangerous risk (based on matched labels)
+- mission persistence includes:
+  - `mission` (legacy string text)
+  - `type`, `content`, `difficulty`, `points`
 - no-image path:
   - returns preview mission (`status: "preview"`)
   - does not write DB rows
@@ -101,8 +106,28 @@ Main file: `backend/src/services/missionService.js`
 - then awards:
   - point badges
   - mission badges
+- interactive mission safeguard:
+  - for `quiz`/`puzzle`/`mini_game`, this endpoint increments `completedMissions` but does not award points (points are awarded by result submission)
 
-### 5.4 User Read Endpoints
+### 5.4 Mission Result Submission Flow
+
+Main files:
+
+- `backend/src/services/missionResultService.js`
+- `backend/src/controllers/missionResultController.js`
+- `backend/src/routes/missionResultRoutes.js`
+
+- endpoint: `POST /api/mission/result`
+- transactional behavior:
+  - validates mission ownership and mission state
+  - computes `bonusPoints` from mission type + result data (`score`, `success`, `timeSpent`)
+  - creates `MissionResult`
+  - auto-completes mission (`status = "completed"`)
+  - increments user `points` by `earnedPoints = mission.points + bonusPoints`
+  - increments `completedMissions` by 1
+  - triggers point and mission badge awarding
+
+### 5.5 User Read Endpoints
 
 Main file: `backend/src/services/userService.js`
 
@@ -122,7 +147,7 @@ Main file: `backend/src/services/userService.js`
     - `pointsToNextLevel = 100 * (baseLevel + 1)^2 - points`
   - triggers age badge awarding based on current `age`
 
-### 5.5 Badge Service
+### 5.6 Badge Service
 
 Main file: `backend/src/services/badgeService.js`
 
@@ -133,7 +158,7 @@ Main file: `backend/src/services/badgeService.js`
   - `AGE`: range matching (`6-9`, `10-12`, `13-17`, `18+`)
 - supports optional transaction client (`tx`) for atomic operations
 
-### 5.6 Prisma and Data Layer
+### 5.7 Prisma and Data Layer
 
 - Prisma client singleton:
   - `backend/src/config/prisma.js`
@@ -282,11 +307,26 @@ Defined in `backend/prisma/schema.prisma`.
 ### 7.3 Mission
 
 - generated mission text and intended points
+- interactive metadata:
+  - `type` (`real_world`, `quiz`, `puzzle`, `mini_game`)
+  - `content` (JSON payload for app-side rendering/game rules)
+  - `difficulty` (1-3)
 - status lifecycle:
   - default `pending`
   - `completed` after parent validation
 
-### 7.4 Badge / UserBadge
+### 7.4 MissionResult
+
+- stores submitted mission performance:
+  - `score`
+  - `success`
+  - `timeSpent`
+  - `bonusPoints`
+  - `earnedPoints`
+- links each result to mission and user
+- used to track interactive outcomes and reward transparency
+
+### 7.5 Badge / UserBadge
 
 - `Badge`: catalog (`name`, `type`, `requirementValue`, description)
 - `UserBadge`: earned relation with `awardedAt`
@@ -305,6 +345,9 @@ Defined in `backend/prisma/schema.prisma`.
 - `GET /user/:id/summary`
 - `PUT /mission/:id/complete`
   - body: `{ bonusPoints: 0 }` (optional, non-negative integer)
+- `POST /mission/result`
+  - body: `{ missionId, userId, success, score?, timeSpent? }`
+  - awards `earnedPoints = base mission points + calculated bonus`
 
 ### 8.2 AI API (`http://127.0.0.1:8000`)
 
@@ -435,6 +478,7 @@ Tests in `backend/src/services/__tests__/` cover:
 
 - `analyzeService` mission mapping, reward conditions, cooldown/cap behavior
 - `missionService` completion edge cases and reward transfer
+- `missionResultService` bonus calculation, result submission, auto-completion, and points/badge updates
 - `badgeService` threshold and age badge awarding
 - `userService` summary fields and badge retrieval
 - `aiService` HTTP client behavior and error handling
@@ -459,7 +503,7 @@ Tests in `ai-service/tests/` cover:
 ## 13) Production Hardening Checklist
 
 - add structured logging with correlation IDs across backend and AI service
-- add readiness endpoint (model + OCR + DB connectivity)
+- extend readiness to include optional dependency/DB connectivity checks
 - enforce request auth and per-user authorization
 - add rate limits and abuse protection
 - add DB indexes for heavy pagination queries
