@@ -396,6 +396,11 @@
         <pre id="outDisplay"></pre>
         <label>Mission</label>
         <pre id="outMission"></pre>
+        <div id="gameWidget" style="margin-top: 1rem; padding: 1rem; background: #f0f0f0; border-radius: 8px; display: none;">
+          <h4>Interactive Mission</h4>
+          <div id="gameContent"></div>
+          <button id="submitGameResult" type="button" style="margin-top: 1rem;">Submit Result</button>
+        </div>
         <label>Raw JSON</label>
         <pre id="outRaw"></pre>
       </div>
@@ -526,6 +531,10 @@
     }
 
     let imageB64 = null;
+    let currentMission = null;
+    let currentGame = null;
+    let gameStartTime = null;
+    let ticTacToeBoard = null;
 
     function switchTab(tabId) {
       document.querySelectorAll(".tab-content").forEach((el) => {
@@ -641,9 +650,229 @@
       return String(cat);
     }
 
+    function resetGameWidget() {
+      currentMission = null;
+      currentGame = null;
+      gameStartTime = null;
+      ticTacToeBoard = null;
+      $("gameContent").innerHTML = "";
+      $("gameWidget").style.display = "none";
+    }
+
+    function renderQuiz(content) {
+      const question = escapeHtml(String(content?.question || "Choose the best answer."));
+      const choices = Array.isArray(content?.choices) ? content.choices : [];
+      const choiceHtml = choices
+        .map((choice, idx) => {
+          return (
+            '<label><input type="radio" name="quizAnswer" value="' +
+            idx +
+            '"> ' +
+            escapeHtml(String(choice)) +
+            "</label><br>"
+          );
+        })
+        .join("");
+      $("gameContent").innerHTML = "<p><strong>" + question + "</strong></p>" + choiceHtml;
+      currentGame = {
+        type: "quiz",
+        correct: Number.isFinite(Number(content?.correctAnswer))
+          ? Number(content.correctAnswer)
+          : 0,
+      };
+    }
+
+    function checkTicTacToeWinner(board) {
+      const lines = [
+        [0, 1, 2], [3, 4, 5], [6, 7, 8],
+        [0, 3, 6], [1, 4, 7], [2, 5, 8],
+        [0, 4, 8], [2, 4, 6],
+      ];
+      for (const line of lines) {
+        const [a, b, c] = line;
+        if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a];
+      }
+      return null;
+    }
+
+    async function submitCurrentGameResult() {
+      if (!currentMission || !currentGame) {
+        alert("No interactive mission to submit.");
+        return;
+      }
+      if (!Number.isFinite(Number(currentMission.id)) || Number(currentMission.id) <= 0) {
+        alert("This mission cannot be submitted (missing mission id).");
+        return;
+      }
+      const result = {
+        missionId: Number(currentMission.id),
+        userId: uid(),
+      };
+
+      switch (currentGame.type) {
+        case "quiz": {
+          const selected = document.querySelector('input[name="quizAnswer"]:checked');
+          if (!selected) {
+            alert("Please select an answer");
+            return;
+          }
+          const selectedVal = Number(selected.value);
+          const isCorrect = selectedVal === Number(currentGame.correct);
+          result.success = isCorrect;
+          result.score = isCorrect ? 1 : 0;
+          break;
+        }
+        case "tic_tac_toe": {
+          const winner = checkTicTacToeWinner(ticTacToeBoard || []);
+          const emptyCount = (ticTacToeBoard || []).filter((x) => x === null).length;
+          if (!winner && emptyCount > 0) {
+            alert("Finish the game before submitting.");
+            return;
+          }
+          if (winner === "X") {
+            result.success = true;
+            result.score = 2;
+          } else if (winner === "O") {
+            result.success = false;
+            result.score = 0;
+          } else {
+            result.success = false;
+            result.score = 1;
+          }
+          break;
+        }
+        case "sudoku": {
+          const filled = checkSudokuSolution();
+          result.success = filled;
+          result.score = filled ? 1 : 0;
+          break;
+        }
+        default:
+          alert("Unsupported game type.");
+          return;
+      }
+
+      result.timeSpent = Math.max(0, Math.floor((Date.now() - (gameStartTime || Date.now())) / 1000));
+
+      const res = await fetch(apiBase() + "/api/mission/result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(result),
+      });
+      const data = await readJsonSafe(res);
+      if (!res.ok) {
+        alert("Error: " + (data.message || res.statusText));
+        return;
+      }
+
+      alert("Earned " + Number(data.earnedPoints || 0) + " points!");
+      resetGameWidget();
+      $("btnSummary").click();
+      $("btnHistory").click();
+    }
+
+    function handleTicTacToeMove(idx) {
+      if (!Array.isArray(ticTacToeBoard) || ticTacToeBoard[idx]) return;
+      ticTacToeBoard[idx] = "X";
+      const userCell = document.querySelector('.ttt-cell[data-index="' + idx + '"]');
+      if (userCell) userCell.textContent = "X";
+
+      const winner = checkTicTacToeWinner(ticTacToeBoard);
+      if (winner) {
+        $("tttStatus").textContent = "Winner: " + winner;
+        $("submitGameResult").click();
+        return;
+      }
+
+      const empty = ticTacToeBoard.reduce((acc, val, i) => (val === null ? acc.concat(i) : acc), []);
+      if (!empty.length) {
+        $("tttStatus").textContent = "Draw.";
+        $("submitGameResult").click();
+        return;
+      }
+
+      const aiMove = empty[Math.floor(Math.random() * empty.length)];
+      ticTacToeBoard[aiMove] = "O";
+      const aiCell = document.querySelector('.ttt-cell[data-index="' + aiMove + '"]');
+      if (aiCell) aiCell.textContent = "O";
+
+      const aiWinner = checkTicTacToeWinner(ticTacToeBoard);
+      if (aiWinner) {
+        $("tttStatus").textContent = "Winner: " + aiWinner;
+        $("submitGameResult").click();
+        return;
+      }
+
+      const remaining = ticTacToeBoard.filter((v) => v === null).length;
+      $("tttStatus").textContent = remaining ? "Your turn (X)" : "Draw.";
+      if (!remaining) $("submitGameResult").click();
+    }
+
+    function renderTicTacToe() {
+      ticTacToeBoard = Array(9).fill(null);
+      let html = '<div style="display: grid; grid-template-columns: repeat(3, 60px); gap: 5px;">';
+      for (let i = 0; i < 9; i++) {
+        html += '<button class="ttt-cell" type="button" data-index="' + i + '" style="width:60px;height:60px;font-size:24px;">&nbsp;</button>';
+      }
+      html += '</div><p id="tttStatus">Your turn (X)</p>';
+      $("gameContent").innerHTML = html;
+      document.querySelectorAll(".ttt-cell").forEach((btn) => {
+        btn.addEventListener("click", () => handleTicTacToeMove(parseInt(btn.dataset.index, 10)));
+      });
+      currentGame = { type: "tic_tac_toe", board: ticTacToeBoard };
+    }
+
+    function renderSudoku(content) {
+      const baseGrid = Array.isArray(content?.grid) ? content.grid : Array(4).fill(0).map(() => Array(4).fill(0));
+      let html = '<table style="border-collapse: collapse; margin: 0 auto;">';
+      for (let i = 0; i < 4; i++) {
+        html += "<tr>";
+        for (let j = 0; j < 4; j++) {
+          const val = Number(baseGrid?.[i]?.[j] ?? 0);
+          const isFixed = Number.isFinite(val) && val !== 0;
+          html += '<td style="border:1px solid #ccc; padding:5px;">';
+          if (isFixed) {
+            html += '<input type="text" value="' + val + '" disabled style="width:40px;text-align:center;">';
+          } else {
+            html += '<input type="text" class="sudoku-cell" data-row="' + i + '" data-col="' + j + '" style="width:40px;text-align:center;">';
+          }
+          html += "</td>";
+        }
+        html += "</tr>";
+      }
+      html += "</table>";
+      $("gameContent").innerHTML = html;
+      currentGame = {
+        type: "sudoku",
+        baseGrid,
+        solution: Array.isArray(content?.solution) ? content.solution : null,
+      };
+    }
+
+    function checkSudokuSolution() {
+      if (!currentGame || currentGame.type !== "sudoku") return false;
+      const baseGrid = currentGame.baseGrid || Array(4).fill(0).map(() => Array(4).fill(0));
+      const finalGrid = baseGrid.map((row) => row.slice());
+      const cells = document.querySelectorAll(".sudoku-cell");
+      for (const cell of cells) {
+        const row = Number(cell.dataset.row);
+        const col = Number(cell.dataset.col);
+        const val = parseInt(cell.value, 10);
+        if (!Number.isFinite(val)) return false;
+        finalGrid[row][col] = val;
+      }
+      if (currentGame.solution) {
+        const userFlat = finalGrid.flat();
+        const solutionFlat = currentGame.solution.flat ? currentGame.solution.flat() : currentGame.solution;
+        return JSON.stringify(userFlat) === JSON.stringify(solutionFlat);
+      }
+      return finalGrid.flat().every((v) => Number.isFinite(Number(v)) && Number(v) > 0);
+    }
+
     $("btnAnalyze").addEventListener("click", async () => {
       showErr($("analyzeErr"), "");
       $("analyzeOut").hidden = true;
+      resetGameWidget();
       $("analyzeElapsed").textContent = "0s";
       $("analyzeLoadHint").textContent = imageB64
         ? "OCR and risk scoring can take 10–60s on large images. Do not close this tab."
@@ -682,6 +911,38 @@
         $("outDisplay").textContent = disp;
         $("outMission").textContent = JSON.stringify(data.mission, null, 2);
         $("outRaw").textContent = JSON.stringify(data, null, 2);
+
+        const mission = data.mission || null;
+        if (
+          mission &&
+          Number.isFinite(Number(mission.id)) &&
+          mission.type &&
+          String(mission.type).toLowerCase() !== "real_world"
+        ) {
+          currentMission = mission;
+          gameStartTime = Date.now();
+          $("gameWidget").style.display = "block";
+          const missionType = String(mission.type || "").toLowerCase();
+          if (missionType === "quiz") {
+            renderQuiz(mission.content || {});
+          } else if (missionType === "puzzle") {
+            if ((mission.content && mission.content.game === "sudoku4x4") || !mission.content?.game) {
+              renderSudoku(mission.content || {});
+            } else {
+              resetGameWidget();
+            }
+          } else if (missionType === "mini_game") {
+            if (!mission.content?.game || mission.content.game === "tic_tac_toe" || mission.content.game === "reaction_tap") {
+              renderTicTacToe();
+            } else {
+              resetGameWidget();
+            }
+          } else {
+            resetGameWidget();
+          }
+        } else {
+          resetGameWidget();
+        }
         $("analyzeOut").hidden = false;
       } catch (e) {
         showErr($("analyzeErr"), e.message || String(e));
@@ -690,6 +951,14 @@
         showLoadPanel("analyzeLoad", false);
         setButtonLoading("btnAnalyze", false, "Analyzing…", "Run analyze");
         setActionsDisabled(false);
+      }
+    });
+
+    $("submitGameResult").addEventListener("click", async () => {
+      try {
+        await submitCurrentGameResult();
+      } catch (err) {
+        alert(err.message || String(err));
       }
     });
 

@@ -51,6 +51,7 @@ flowchart LR
    - parent completion endpoint keeps `completedMissions` logic and avoids double-point award for interactive missions
 8. Badge logic runs on point, mission-completion, and age conditions.
 9. Parent dashboard endpoints expose history, missions, summary, and earned badges.
+10. Demo Analyze tab can render interactive widgets for mission types (`quiz`, `puzzle`, `mini_game`) and submit outcomes to `/api/mission/result`.
 
 ## 5) Backend (Node.js / Express / Prisma)
 
@@ -348,6 +349,16 @@ Defined in `backend/prisma/schema.prisma`.
 - `POST /mission/result`
   - body: `{ missionId, userId, success, score?, timeSpent? }`
   - awards `earnedPoints = base mission points + calculated bonus`
+
+### 8.1.1 Demo interactive mission widget behavior
+
+- file: `demo/index.html` (Analyze tab)
+- keeps legacy mission text rendering (`mission.mission`) unchanged
+- when mission type is interactive:
+  - `quiz` -> renders multiple-choice widget
+  - `puzzle` with `sudoku4x4` -> renders 4x4 sudoku widget
+  - `mini_game` -> renders tic-tac-toe widget
+- submits game outcome to `POST /api/mission/result` and then refreshes summary/history
 
 ### 8.2 AI API (`http://127.0.0.1:8000`)
 
