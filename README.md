@@ -355,12 +355,16 @@ Defined in `backend/prisma/schema.prisma`.
 - file: `demo/index.html` (Analyze tab)
 - keeps legacy mission text rendering (`mission.mission`) unchanged
 - when mission type is interactive:
-  - `quiz` -> renders multiple-choice widget
-  - `puzzle` with `sudoku4x4` -> renders 4x4 sudoku widget
-  - `mini_game` -> renders tic-tac-toe widget
+  - `quiz` -> renders option cards with a check-answer step and feedback before submit
+  - `puzzle` with `sudoku4x4` -> renders 4x4 sudoku with check/reset/hint controls and per-cell feedback
+  - `mini_game` -> renders tic-tac-toe with reset/play-again controls and explicit end-state messaging
 - submits game outcome to `POST /api/mission/result` and then refreshes summary/history
 - accessibility/readability hardening:
   - game widget content uses explicit dark text on light background to avoid invisible quiz labels in dark theme context
+- child-friendly UX additions:
+  - points preview shown in the widget (`mission.points`)
+  - in-widget timer from mission start to submission
+  - restart button resets only the game UI/state without requiring a new analyze request
 
 ### 8.2 AI API (`http://127.0.0.1:8000`)
 

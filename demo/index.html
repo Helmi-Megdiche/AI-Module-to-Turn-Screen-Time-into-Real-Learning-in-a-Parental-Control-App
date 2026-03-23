@@ -347,6 +347,88 @@
       background: #fff;
       color: #000;
     }
+    .ttt-cell {
+      border-radius: 12px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: transform 0.1s ease, background 0.15s ease;
+    }
+    .ttt-cell:hover:not(:disabled) {
+      transform: scale(1.05);
+      background: #e9ecef;
+    }
+    .ttt-cell.X {
+      background: #cfe2ff;
+      color: #0b5ed7;
+    }
+    .ttt-cell.O {
+      background: #f8d7da;
+      color: #dc3545;
+    }
+    .ttt-cell.move-pop {
+      animation: tttPop 0.18s ease;
+    }
+    @keyframes tttPop {
+      0% { transform: scale(0.85); }
+      100% { transform: scale(1); }
+    }
+    .sudoku-cell {
+      width: 45px !important;
+      height: 45px !important;
+      text-align: center;
+      font-size: 1.1rem;
+      border: 1px solid #dee2e6 !important;
+      border-radius: 4px;
+    }
+    .sudoku-cell.correct {
+      background: #d1e7dd;
+      border-color: #198754 !important;
+    }
+    .sudoku-cell.incorrect {
+      background: #f8d7da;
+      border-color: #dc3545 !important;
+    }
+    .quiz-option {
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 0.5rem 0.65rem;
+      margin: 0.5rem 0;
+      cursor: pointer;
+      color: #212529;
+      transition: border-color 0.12s ease, transform 0.1s ease, background 0.12s ease;
+    }
+    .quiz-option:hover { transform: translateY(-1px); border-color: #b6bcc3; }
+    .quiz-option.selected {
+      background: #cfe2ff;
+      border-color: #0d6efd;
+    }
+    .quiz-option.correct {
+      background: #d1e7dd;
+      border-color: #198754;
+    }
+    .quiz-option.incorrect {
+      background: #f8d7da;
+      border-color: #dc3545;
+    }
+    #gameMeta {
+      margin-top: 0.6rem;
+      color: #495057;
+      font-size: 0.84rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+    }
+    #gameFeedback {
+      margin-top: 0.6rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #212529;
+      min-height: 1.2rem;
+    }
+    #submitGameResult:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
@@ -430,7 +512,15 @@
         <pre id="outMission"></pre>
         <div id="gameWidget" style="margin-top: 1rem; padding: 1rem; background: #f0f0f0; border-radius: 8px; display: none;">
           <h4>Interactive Mission</h4>
+          <div class="actions" style="margin-top:0.3rem">
+            <button id="restartGameBtn" type="button" class="secondary">Restart</button>
+          </div>
+          <div id="gameMeta">
+            <span id="gamePointsPreview">Points: —</span>
+            <span id="gameTimer">Time: 0s</span>
+          </div>
           <div id="gameContent"></div>
+          <div id="gameFeedback"></div>
           <button id="submitGameResult" type="button" style="margin-top: 1rem;">Submit Result</button>
         </div>
         <label>Raw JSON</label>
@@ -567,6 +657,7 @@
     let currentGame = null;
     let gameStartTime = null;
     let ticTacToeBoard = null;
+    let gameTimerInterval = null;
 
     function switchTab(tabId) {
       document.querySelectorAll(".tab-content").forEach((el) => {
@@ -682,12 +773,45 @@
       return String(cat);
     }
 
+    function setSubmitEnabled(enabled) {
+      $("submitGameResult").disabled = !enabled;
+    }
+
+    function setGameFeedback(text) {
+      $("gameFeedback").textContent = text || "";
+    }
+
+    function stopGameTimer() {
+      if (gameTimerInterval) {
+        clearInterval(gameTimerInterval);
+        gameTimerInterval = null;
+      }
+    }
+
+    function startGameTimer() {
+      stopGameTimer();
+      const tick = () => {
+        const elapsed = Math.max(
+          0,
+          Math.floor((Date.now() - (gameStartTime || Date.now())) / 1000)
+        );
+        $("gameTimer").textContent = "Time: " + elapsed + "s";
+      };
+      tick();
+      gameTimerInterval = setInterval(tick, 500);
+    }
+
     function resetGameWidget() {
+      stopGameTimer();
       currentMission = null;
       currentGame = null;
       gameStartTime = null;
       ticTacToeBoard = null;
       $("gameContent").innerHTML = "";
+      $("gameTimer").textContent = "Time: 0s";
+      $("gamePointsPreview").textContent = "Points: —";
+      setGameFeedback("");
+      setSubmitEnabled(false);
       $("gameWidget").style.display = "none";
     }
 
@@ -697,21 +821,64 @@
       const choiceHtml = choices
         .map((choice, idx) => {
           return (
-            '<label><input type="radio" name="quizAnswer" value="' +
+            '<div class="quiz-option" data-idx="' +
             idx +
-            '"> ' +
+            '"><input type="radio" name="quizAnswer" value="' +
+            idx +
+            '" style="margin-right:0.4rem"> ' +
             escapeHtml(String(choice)) +
-            "</label><br>"
+            "</div>"
           );
         })
         .join("");
-      $("gameContent").innerHTML = "<p><strong>" + question + "</strong></p>" + choiceHtml;
+      $("gameContent").innerHTML =
+        "<p><strong>" +
+        question +
+        "</strong></p>" +
+        choiceHtml +
+        '<div class="actions" style="margin-top:0.6rem">' +
+        '<button id="quizCheckBtn" type="button" class="secondary">Check Answer</button>' +
+        "</div>";
       currentGame = {
         type: "quiz",
+        selected: null,
+        checked: false,
+        isCorrect: false,
         correct: Number.isFinite(Number(content?.correctAnswer))
           ? Number(content.correctAnswer)
           : 0,
       };
+      setSubmitEnabled(false);
+      setGameFeedback("Select one option, then click Check Answer.");
+
+      document.querySelectorAll(".quiz-option").forEach((el) => {
+        el.addEventListener("click", () => {
+          if (currentGame.checked) return;
+          document.querySelectorAll(".quiz-option").forEach((opt) => opt.classList.remove("selected"));
+          el.classList.add("selected");
+          const idx = Number(el.dataset.idx);
+          currentGame.selected = idx;
+          const radio = el.querySelector('input[type="radio"]');
+          if (radio) radio.checked = true;
+        });
+      });
+
+      $("quizCheckBtn").addEventListener("click", () => {
+        if (currentGame.selected === null || currentGame.selected === undefined) {
+          setGameFeedback("Pick an answer first.");
+          return;
+        }
+        currentGame.checked = true;
+        currentGame.isCorrect = currentGame.selected === Number(currentGame.correct);
+        document.querySelectorAll(".quiz-option").forEach((opt) => {
+          const idx = Number(opt.dataset.idx);
+          opt.classList.remove("selected");
+          if (idx === Number(currentGame.correct)) opt.classList.add("correct");
+          else if (idx === Number(currentGame.selected)) opt.classList.add("incorrect");
+        });
+        setSubmitEnabled(true);
+        setGameFeedback(currentGame.isCorrect ? "Great job! You got it right 😊" : "Not this time. Try again next round 😞");
+      });
     }
 
     function checkTicTacToeWinner(board) {
@@ -743,24 +910,21 @@
 
       switch (currentGame.type) {
         case "quiz": {
-          const selected = document.querySelector('input[name="quizAnswer"]:checked');
-          if (!selected) {
-            alert("Please select an answer");
+          if (!currentGame.checked) {
+            alert("Please check your answer first.");
             return;
           }
-          const selectedVal = Number(selected.value);
-          const isCorrect = selectedVal === Number(currentGame.correct);
+          const isCorrect = !!currentGame.isCorrect;
           result.success = isCorrect;
           result.score = isCorrect ? 1 : 0;
           break;
         }
         case "tic_tac_toe": {
-          const winner = checkTicTacToeWinner(ticTacToeBoard || []);
-          const emptyCount = (ticTacToeBoard || []).filter((x) => x === null).length;
-          if (!winner && emptyCount > 0) {
+          if (!currentGame.gameOver) {
             alert("Finish the game before submitting.");
             return;
           }
+          const winner = checkTicTacToeWinner(ticTacToeBoard || []);
           if (winner === "X") {
             result.success = true;
             result.score = 2;
@@ -774,9 +938,13 @@
           break;
         }
         case "sudoku": {
-          const filled = checkSudokuSolution();
-          result.success = filled;
-          result.score = filled ? 1 : 0;
+          const checked = currentGame.checked
+            ? { success: currentGame.success }
+            : checkSudokuSolution(true);
+          currentGame.checked = true;
+          currentGame.success = !!checked.success;
+          result.success = currentGame.success;
+          result.score = currentGame.success ? 1 : 0;
           break;
         }
         default:
@@ -803,55 +971,87 @@
       $("btnHistory").click();
     }
 
+    function endTicTacToe(winner) {
+      currentGame.gameOver = true;
+      document.querySelectorAll(".ttt-cell").forEach((btn) => (btn.disabled = true));
+      if (winner === "X") {
+        $("tttStatus").textContent = "You win! 🎉";
+        setGameFeedback("Amazing! Submit your result to claim bonus points.");
+      } else if (winner === "O") {
+        $("tttStatus").textContent = "AI wins 🤖";
+        setGameFeedback("Good try! Submit to record your result.");
+      } else {
+        $("tttStatus").textContent = "It's a draw 🤝";
+        setGameFeedback("Draw recorded. Submit your result.");
+      }
+      const btn = $("tttPlayAgain");
+      if (btn) btn.hidden = false;
+      setSubmitEnabled(true);
+    }
+
     function handleTicTacToeMove(idx) {
-      if (!Array.isArray(ticTacToeBoard) || ticTacToeBoard[idx]) return;
+      if (!Array.isArray(ticTacToeBoard) || currentGame.gameOver || ticTacToeBoard[idx]) return;
       ticTacToeBoard[idx] = "X";
       const userCell = document.querySelector('.ttt-cell[data-index="' + idx + '"]');
-      if (userCell) userCell.textContent = "X";
+      if (userCell) {
+        userCell.textContent = "X";
+        userCell.classList.add("X", "move-pop");
+        setTimeout(() => userCell.classList.remove("move-pop"), 180);
+      }
 
       const winner = checkTicTacToeWinner(ticTacToeBoard);
       if (winner) {
-        $("tttStatus").textContent = "Winner: " + winner;
-        $("submitGameResult").click();
+        endTicTacToe(winner);
         return;
       }
 
       const empty = ticTacToeBoard.reduce((acc, val, i) => (val === null ? acc.concat(i) : acc), []);
       if (!empty.length) {
-        $("tttStatus").textContent = "Draw.";
-        $("submitGameResult").click();
+        endTicTacToe(null);
         return;
       }
 
       const aiMove = empty[Math.floor(Math.random() * empty.length)];
       ticTacToeBoard[aiMove] = "O";
       const aiCell = document.querySelector('.ttt-cell[data-index="' + aiMove + '"]');
-      if (aiCell) aiCell.textContent = "O";
+      if (aiCell) {
+        aiCell.textContent = "O";
+        aiCell.classList.add("O", "move-pop");
+        setTimeout(() => aiCell.classList.remove("move-pop"), 180);
+      }
 
       const aiWinner = checkTicTacToeWinner(ticTacToeBoard);
       if (aiWinner) {
-        $("tttStatus").textContent = "Winner: " + aiWinner;
-        $("submitGameResult").click();
+        endTicTacToe(aiWinner);
         return;
       }
 
       const remaining = ticTacToeBoard.filter((v) => v === null).length;
       $("tttStatus").textContent = remaining ? "Your turn (X)" : "Draw.";
-      if (!remaining) $("submitGameResult").click();
+      if (!remaining) endTicTacToe(null);
     }
 
     function renderTicTacToe() {
       ticTacToeBoard = Array(9).fill(null);
-      let html = '<div style="display: grid; grid-template-columns: repeat(3, 60px); gap: 5px;">';
+      let html = '<div style="display: grid; grid-template-columns: repeat(3, 70px); gap: 8px; justify-content: center;">';
       for (let i = 0; i < 9; i++) {
-        html += '<button class="ttt-cell" type="button" data-index="' + i + '" style="width:60px;height:60px;font-size:24px;">&nbsp;</button>';
+        html += '<button class="ttt-cell" type="button" data-index="' + i + '" style="width:70px;height:70px;font-size:32px;"></button>';
       }
-      html += '</div><p id="tttStatus">Your turn (X)</p>';
+      html +=
+        '</div><p id="tttStatus" style="font-weight:bold; margin-top:1rem;">🤔 Your turn (X)</p>' +
+        '<div class="actions">' +
+        '<button id="tttReset" type="button" class="secondary">🔄 Reset Game</button>' +
+        '<button id="tttPlayAgain" type="button" class="secondary" hidden>🎮 Play again</button>' +
+        "</div>";
       $("gameContent").innerHTML = html;
       document.querySelectorAll(".ttt-cell").forEach((btn) => {
         btn.addEventListener("click", () => handleTicTacToeMove(parseInt(btn.dataset.index, 10)));
       });
-      currentGame = { type: "tic_tac_toe", board: ticTacToeBoard };
+      $("tttReset").addEventListener("click", () => renderTicTacToe());
+      $("tttPlayAgain").addEventListener("click", () => renderTicTacToe());
+      currentGame = { type: "tic_tac_toe", board: ticTacToeBoard, gameOver: false };
+      setSubmitEnabled(false);
+      setGameFeedback("Play until someone wins or it ends in a draw.");
     }
 
     function renderSudoku(content) {
@@ -872,33 +1072,120 @@
         }
         html += "</tr>";
       }
-      html += "</table>";
+      html +=
+        "</table>" +
+        '<div class="actions" style="margin-top:0.7rem">' +
+        '<button id="sudokuCheck" type="button" class="secondary">Check Solution</button>' +
+        '<button id="sudokuHint" type="button" class="secondary">Hint</button>' +
+        '<button id="sudokuReset" type="button" class="secondary">Reset</button>' +
+        "</div>";
       $("gameContent").innerHTML = html;
       currentGame = {
         type: "sudoku",
         baseGrid,
         solution: Array.isArray(content?.solution) ? content.solution : null,
+        checked: false,
+        success: false,
       };
+      setSubmitEnabled(false);
+      setGameFeedback("Fill the grid, then click Check Solution.");
+
+      $("sudokuCheck").addEventListener("click", () => {
+        const checked = checkSudokuSolution(true);
+        currentGame.checked = true;
+        currentGame.success = checked.success;
+        setSubmitEnabled(true);
+        setGameFeedback(
+          checked.success
+            ? "Great! All cells are correct ✅"
+            : "Keep going: " +
+                checked.correctCount +
+                "/" +
+                checked.totalEditable +
+                " correct."
+        );
+      });
+
+      $("sudokuReset").addEventListener("click", () => renderSudoku(content));
+      $("sudokuHint").addEventListener("click", () => {
+        if (!currentGame.solution || !Array.isArray(currentGame.solution)) {
+          setGameFeedback("No hint available for this puzzle.");
+          return;
+        }
+        const empties = Array.from(document.querySelectorAll(".sudoku-cell")).filter(
+          (cell) => !Number.isFinite(parseInt(cell.value, 10))
+        );
+        if (!empties.length) {
+          setGameFeedback("No empty cells left for a hint.");
+          return;
+        }
+        const cell = empties[0];
+        const row = Number(cell.dataset.row);
+        const col = Number(cell.dataset.col);
+        const hintVal = Number(currentGame.solution?.[row]?.[col]);
+        if (!Number.isFinite(hintVal)) {
+          setGameFeedback("No hint available for this cell.");
+          return;
+        }
+        cell.value = String(hintVal);
+        setGameFeedback("Hint applied to one cell.");
+      });
     }
 
-    function checkSudokuSolution() {
-      if (!currentGame || currentGame.type !== "sudoku") return false;
+    function checkSudokuSolution(withFeedback = false) {
+      if (!currentGame || currentGame.type !== "sudoku")
+        return { success: false, correctCount: 0, totalEditable: 0 };
       const baseGrid = currentGame.baseGrid || Array(4).fill(0).map(() => Array(4).fill(0));
       const finalGrid = baseGrid.map((row) => row.slice());
       const cells = document.querySelectorAll(".sudoku-cell");
+      let correctCount = 0;
+      let totalEditable = 0;
       for (const cell of cells) {
         const row = Number(cell.dataset.row);
         const col = Number(cell.dataset.col);
         const val = parseInt(cell.value, 10);
-        if (!Number.isFinite(val)) return false;
+        if (!Number.isFinite(val))
+          return { success: false, correctCount, totalEditable: cells.length };
         finalGrid[row][col] = val;
+        totalEditable += 1;
       }
+      let success = false;
       if (currentGame.solution) {
+        const solutionFlat = currentGame.solution.flat
+          ? currentGame.solution.flat()
+          : currentGame.solution;
         const userFlat = finalGrid.flat();
-        const solutionFlat = currentGame.solution.flat ? currentGame.solution.flat() : currentGame.solution;
-        return JSON.stringify(userFlat) === JSON.stringify(solutionFlat);
+        success = JSON.stringify(userFlat) === JSON.stringify(solutionFlat);
+        if (withFeedback) {
+          cells.forEach((cell) => {
+            const row = Number(cell.dataset.row);
+            const col = Number(cell.dataset.col);
+            const val = Number(finalGrid[row][col]);
+            const solVal = Number(currentGame.solution?.[row]?.[col]);
+            const ok = Number.isFinite(solVal) && val === solVal;
+            cell.classList.remove("correct", "incorrect");
+            cell.classList.add(ok ? "correct" : "incorrect");
+            if (ok) correctCount += 1;
+          });
+        } else {
+          correctCount = success ? totalEditable : 0;
+        }
+      } else {
+        success = finalGrid
+          .flat()
+          .every((v) => Number.isFinite(Number(v)) && Number(v) > 0);
+        if (withFeedback) {
+          cells.forEach((cell) => {
+            const ok = Number.isFinite(parseInt(cell.value, 10));
+            cell.classList.remove("correct", "incorrect");
+            cell.classList.add(ok ? "correct" : "incorrect");
+            if (ok) correctCount += 1;
+          });
+        } else {
+          correctCount = success ? totalEditable : 0;
+        }
       }
-      return finalGrid.flat().every((v) => Number.isFinite(Number(v)) && Number(v) > 0);
+      return { success, correctCount, totalEditable };
     }
 
     $("btnAnalyze").addEventListener("click", async () => {
@@ -953,7 +1240,10 @@
         ) {
           currentMission = mission;
           gameStartTime = Date.now();
+          $("gamePointsPreview").textContent =
+            "You can earn up to " + Number(mission.points || 0) + " base points";
           $("gameWidget").style.display = "block";
+          startGameTimer();
           const missionType = String(mission.type || "").toLowerCase();
           if (missionType === "quiz") {
             renderQuiz(mission.content || {});
@@ -991,6 +1281,22 @@
         await submitCurrentGameResult();
       } catch (err) {
         alert(err.message || String(err));
+      }
+    });
+
+    $("restartGameBtn").addEventListener("click", () => {
+      if (!currentMission) return;
+      gameStartTime = Date.now();
+      startGameTimer();
+      setGameFeedback("Game restarted.");
+      setSubmitEnabled(false);
+      const missionType = String(currentMission.type || "").toLowerCase();
+      if (missionType === "quiz") {
+        renderQuiz(currentMission.content || {});
+      } else if (missionType === "puzzle") {
+        renderSudoku(currentMission.content || {});
+      } else if (missionType === "mini_game") {
+        renderTicTacToe();
       }
     });
 
