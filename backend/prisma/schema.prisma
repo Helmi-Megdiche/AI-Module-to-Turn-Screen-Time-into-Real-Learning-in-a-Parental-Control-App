@@ -18,6 +18,7 @@ model User {
   createdAt         DateTime   @default(now())
   analyses          Analysis[]
   missions          Mission[]
+  missionResults    MissionResult[]
   userBadges        UserBadge[]
 }
 
@@ -35,13 +36,31 @@ model Analysis {
 }
 
 model Mission {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  mission   String
-  points    Int
-  status    String   @default("pending")
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             Int             @id @default(autoincrement())
+  userId         Int
+  mission        String
+  points         Int
+  status         String          @default("pending")
+  type           String          @default("real_world")
+  content        Json?
+  difficulty     Int             @default(1)
+  createdAt      DateTime        @default(now())
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  missionResults MissionResult[]
+}
+
+model MissionResult {
+  id           Int      @id @default(autoincrement())
+  missionId    Int
+  userId       Int
+  score        Int?
+  success      Boolean
+  timeSpent    Int?
+  bonusPoints  Int      @default(0)
+  earnedPoints Int      @default(0)
+  createdAt    DateTime @default(now())
+  mission      Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Badge {

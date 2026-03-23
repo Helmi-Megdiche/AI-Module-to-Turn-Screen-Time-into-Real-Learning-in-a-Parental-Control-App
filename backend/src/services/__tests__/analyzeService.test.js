@@ -13,7 +13,11 @@ jest.mock('../badgeService', () => ({
 const prisma = require('../../config/prisma');
 const aiService = require('../aiService');
 const { awardPointBadges } = require('../badgeService');
-const { missionForRiskScore, runAnalyze } = require('../analyzeService');
+const {
+  missionForRiskScore,
+  generateInteractiveMission,
+  runAnalyze,
+} = require('../analyzeService');
 
 describe('missionForRiskScore', () => {
   test('below 0.3 → continue mission, 2 points', () => {
@@ -51,6 +55,43 @@ describe('missionForRiskScore', () => {
       mission: 'Go outside for 20 minutes',
       points: 10,
     });
+  });
+});
+
+describe('generateInteractiveMission', () => {
+  test('returns quiz mission for dangerous hate/harassment signals', () => {
+    const mission = generateInteractiveMission(0.9, 'dangerous', 12, [
+      'hate speech',
+    ]);
+    expect(mission).toEqual(
+      expect.objectContaining({
+        type: 'quiz',
+        points: 20,
+        difficulty: 3,
+      })
+    );
+  });
+
+  test('returns puzzle mission for mid risk', () => {
+    const mission = generateInteractiveMission(0.5, 'risky', 10, []);
+    expect(mission).toEqual(
+      expect.objectContaining({
+        type: 'puzzle',
+        points: 15,
+        difficulty: 2,
+      })
+    );
+  });
+
+  test('returns real_world mission for safe risk', () => {
+    const mission = generateInteractiveMission(0.1, 'safe', 9, []);
+    expect(mission).toEqual(
+      expect.objectContaining({
+        type: 'real_world',
+        points: 2,
+        difficulty: 1,
+      })
+    );
   });
 });
 
@@ -128,6 +169,12 @@ describe('runAnalyze safe-point controls', () => {
 
     expect(tx.analysis.create).toHaveBeenCalledTimes(1);
     expect(tx.mission.create).toHaveBeenCalledTimes(1);
+    expect(tx.mission.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: 'real_world',
+        difficulty: 1,
+      }),
+    });
     expect(tx.user.update).toHaveBeenCalledWith({
       where: { id: 1 },
       data: expect.objectContaining({
@@ -165,6 +212,11 @@ describe('runAnalyze safe-point controls', () => {
 
     expect(tx.analysis.create).toHaveBeenCalledTimes(1);
     expect(tx.mission.create).toHaveBeenCalledTimes(1);
+    expect(tx.mission.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: 'real_world',
+      }),
+    });
     expect(tx.user.update).not.toHaveBeenCalled();
     expect(awardPointBadges).not.toHaveBeenCalled();
   });
@@ -235,6 +287,11 @@ describe('runAnalyze safe-point controls', () => {
 
     expect(tx.analysis.create).toHaveBeenCalledTimes(1);
     expect(tx.mission.create).toHaveBeenCalledTimes(1);
+    expect(tx.mission.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: 'real_world',
+      }),
+    });
     expect(tx.user.update).not.toHaveBeenCalled();
     expect(awardPointBadges).not.toHaveBeenCalled();
   });
@@ -305,6 +362,12 @@ describe('runAnalyze safe-point controls', () => {
 
     expect(tx.analysis.create).toHaveBeenCalledTimes(1);
     expect(tx.mission.create).toHaveBeenCalledTimes(1);
+    expect(tx.mission.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: 'mini_game',
+        difficulty: 3,
+      }),
+    });
     expect(tx.user.update).not.toHaveBeenCalled();
     expect(awardPointBadges).not.toHaveBeenCalled();
   });

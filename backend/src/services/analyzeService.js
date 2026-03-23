@@ -93,6 +93,81 @@ function missionForRiskScore(riskScore) {
   return { mission: 'Go outside for 20 minutes', points: 10 };
 }
 
+function hasAnyLabel(labels, expected) {
+  if (!Array.isArray(labels) || labels.length === 0) {
+    return false;
+  }
+  const normalized = new Set(
+    labels.filter((x) => typeof x === 'string').map((x) => x.toLowerCase())
+  );
+  return expected.some((label) => normalized.has(label));
+}
+
+function generateInteractiveMission(riskScore, category, age, matchedKeywords = []) {
+  if (riskScore > 0.7) {
+    if (hasAnyLabel(matchedKeywords, ['hate speech', 'harassment'])) {
+      return {
+        mission: 'Complete the respectful communication quiz.',
+        points: 20,
+        type: 'quiz',
+        difficulty: 3,
+        content: {
+          question: 'Which of these is a respectful way to express disagreement?',
+          choices: [
+            "You're stupid",
+            'I disagree with your opinion',
+            'Nobody likes what you say',
+          ],
+          correctAnswer: 1,
+        },
+      };
+    }
+    return {
+      mission: 'Complete the focus mini-game challenge.',
+      points: 18,
+      type: 'mini_game',
+      difficulty: 3,
+      content: {
+        game: 'reaction_tap',
+        targetHits: 12,
+        maxSeconds: 45,
+      },
+    };
+  }
+
+  if (riskScore > 0.3) {
+    return {
+      mission: 'Complete the puzzle mission.',
+      points: 15,
+      type: 'puzzle',
+      difficulty: 2,
+      content: {
+        game: 'sudoku4x4',
+        grid: [
+          [0, 0, 1, 2],
+          [0, 0, 0, 0],
+          [0, 0, 0, 0],
+          [0, 0, 0, 0],
+        ],
+      },
+    };
+  }
+
+  return {
+    mission:
+      age < 10
+        ? 'Do 10 jumping jacks and share one thing you learned today.'
+        : 'Take a 5-minute offline break and write one useful takeaway from your activity.',
+    points: 2,
+    type: 'real_world',
+    difficulty: 1,
+    content: {
+      description:
+        'Do 10 jumping jacks and think about what you learned today.',
+    },
+  };
+}
+
 function startOfDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -116,8 +191,12 @@ async function buildPreviewAnalyzeResult({ userId, age, analysis, mission }) {
       createdAt: null,
     },
     mission: {
+      id: null,
       mission: mission.mission,
       points: mission.points,
+      type: mission.type ?? 'real_world',
+      content: mission.content ?? null,
+      difficulty: mission.difficulty ?? 1,
       status: 'preview',
     },
     user: user ?? {
@@ -136,15 +215,21 @@ async function runAnalyze({ userId, age, image }) {
   const analysis = await resolveAnalysisPayload(image);
   const { text, riskScore, category, usedAI, displayText, matchedKeywords } =
     analysis;
-  const { mission, points } = missionForRiskScore(riskScore);
-  const awardImmediately = riskScore < 0.3;
+  const generatedMission = generateInteractiveMission(
+    riskScore,
+    category,
+    age,
+    matchedKeywords
+  );
+  const { mission, points, type, content, difficulty } = generatedMission;
+  const awardImmediately = type === 'real_world' && riskScore < 0.3;
 
   if (!hasProvidedImage(image)) {
     return buildPreviewAnalyzeResult({
       userId,
       age,
       analysis,
-      mission: { mission, points },
+      mission: { mission, points, type, content, difficulty },
     });
   }
 
@@ -178,6 +263,9 @@ async function runAnalyze({ userId, age, image }) {
         userId: user.id,
         mission,
         points,
+        type,
+        content,
+        difficulty,
       },
     });
 
@@ -222,4 +310,4 @@ async function runAnalyze({ userId, age, image }) {
   });
 }
 
-module.exports = { runAnalyze, missionForRiskScore };
+module.exports = { runAnalyze, missionForRiskScore, generateInteractiveMission };

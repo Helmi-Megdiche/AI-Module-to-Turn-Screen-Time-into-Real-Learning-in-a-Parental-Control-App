@@ -96,6 +96,39 @@ describe('missionService.completeMission', () => {
     expect(awardMissionBadges).not.toHaveBeenCalled();
   });
 
+  test('does not award points for interactive missions on parent completion endpoint', async () => {
+    const tx = {
+      mission: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 12,
+          userId: 4,
+          points: 20,
+          type: 'quiz',
+          status: 'pending',
+          user: { id: 4, points: 100, completedMissions: 5 },
+        }),
+        update: jest.fn().mockResolvedValue({ id: 12, status: 'completed' }),
+      },
+      user: {
+        update: jest.fn().mockResolvedValue({
+          id: 4,
+          points: 100,
+          completedMissions: 6,
+        }),
+      },
+    };
+    wireTransaction(tx);
+
+    await completeMission(12, 7);
+
+    expect(tx.user.update).toHaveBeenCalledWith({
+      where: { id: 4 },
+      data: { completedMissions: { increment: 1 } },
+    });
+    expect(awardPointBadges).not.toHaveBeenCalled();
+    expect(awardMissionBadges).toHaveBeenCalledWith(4, 5, 6, tx);
+  });
+
   test('throws MISSION_ALREADY_COMPLETED when mission is already completed', async () => {
     const tx = {
       mission: {

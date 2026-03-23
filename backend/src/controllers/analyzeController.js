@@ -58,6 +58,11 @@ async function postAnalyze(req, res) {
       timestamp: new Date().toISOString(),
       analysis,
       mission: {
+        id: mission.id ?? null,
+        type: mission.type ?? 'real_world',
+        content: mission.content ?? null,
+        difficulty: mission.difficulty ?? 1,
+        text: mission.mission,
         mission: mission.mission,
         points: mission.points,
         status: mission.status,

@@ -32,19 +32,28 @@ async function completeMission(missionId, bonusPoints = 0) {
     });
 
     const bonus = bonusPointsInt > 0 ? bonusPointsInt : 0;
+    const isInteractiveMission = ['quiz', 'puzzle', 'mini_game'].includes(
+      String(mission.type || '').toLowerCase()
+    );
+    const awardedPoints = isInteractiveMission ? 0 : mission.points + bonus;
+    const userUpdateData = {
+      completedMissions: { increment: 1 },
+    };
+    if (awardedPoints > 0) {
+      userUpdateData.points = { increment: awardedPoints };
+    }
     const userUpdated = await tx.user.update({
       where: { id: mission.userId },
-      data: {
-        points: { increment: mission.points + bonus },
-        completedMissions: { increment: 1 },
-      },
+      data: userUpdateData,
     });
 
     const previousPoints = Number(mission.user?.points ?? 0);
     const newPoints = Number(userUpdated.points ?? previousPoints);
     const previousCompleted = Number(mission.user?.completedMissions ?? 0);
     const newCompleted = Number(userUpdated.completedMissions ?? previousCompleted);
-    await awardPointBadges(mission.userId, previousPoints, newPoints, tx);
+    if (awardedPoints > 0) {
+      await awardPointBadges(mission.userId, previousPoints, newPoints, tx);
+    }
     await awardMissionBadges(mission.userId, previousCompleted, newCompleted, tx);
 
     return updatedMission;
