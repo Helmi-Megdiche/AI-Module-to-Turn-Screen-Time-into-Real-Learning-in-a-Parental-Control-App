@@ -315,6 +315,38 @@
       color: var(--muted);
       font-size: 0.78rem;
     }
+    /* Ensure interactive game widget text remains readable on light surfaces */
+    #gameWidget {
+      background: #f8f9fa !important;
+      color: #212529;
+    }
+    #gameWidget h4,
+    #gameWidget p,
+    #gameWidget label {
+      color: #212529;
+    }
+    #gameContent {
+      background: #ffffff;
+      padding: 1rem;
+      border-radius: 4px;
+      margin-top: 0.5rem;
+    }
+    #gameContent input,
+    #gameContent label {
+      color: #212529;
+    }
+    #gameContent input[type="radio"] {
+      accent-color: #212529;
+    }
+    .ttt-cell {
+      background: #fff;
+      color: #000;
+      border: 1px solid #ccc;
+    }
+    .sudoku-cell {
+      background: #fff;
+      color: #000;
+    }
   </style>
 </head>
 <body>

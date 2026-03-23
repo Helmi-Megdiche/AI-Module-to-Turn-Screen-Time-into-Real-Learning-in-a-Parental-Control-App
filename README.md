@@ -359,6 +359,8 @@ Defined in `backend/prisma/schema.prisma`.
   - `puzzle` with `sudoku4x4` -> renders 4x4 sudoku widget
   - `mini_game` -> renders tic-tac-toe widget
 - submits game outcome to `POST /api/mission/result` and then refreshes summary/history
+- accessibility/readability hardening:
+  - game widget content uses explicit dark text on light background to avoid invisible quiz labels in dark theme context
 
 ### 8.2 AI API (`http://127.0.0.1:8000`)
 
