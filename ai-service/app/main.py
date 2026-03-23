@@ -15,12 +15,16 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.services.analysis_orchestrator import build_analyze_response_from_plain_text
-from app.services import ocr_service
+from app.services import ocr_service, vision_service
 from app.services.moderation_service import initialize_moderation
 from app.utils.image_utils import base64_to_pil
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+ocr_ready = False
+moderation_ready = False
+vision_ready = False
 
 
 app = FastAPI(title="Parental Control AI Service")
@@ -29,6 +33,7 @@ app = FastAPI(title="Parental Control AI Service")
 @app.on_event("startup")
 def startup_event() -> None:
     """Preload EasyOCR and the Hugging Face zero-shot model (or log degraded mode if load fails)."""
+    global ocr_ready, moderation_ready, vision_ready
     _cuda = torch.cuda.is_available()
     _device = torch.cuda.get_device_name(0) if _cuda else "cpu"
     # Use logger (not only print) so uvicorn always shows this — prints can be easy to miss in some consoles.
@@ -42,11 +47,21 @@ def startup_event() -> None:
     # Block startup until OCR and moderation are initialized.
     try:
         ocr_service.get_reader()
+        ocr_ready = True
         logger.info("EasyOCR reader ready")
     except Exception as e:
+        ocr_ready = False
         logger.warning("Could not preload EasyOCR (will load on first request): %s", e)
-    if not initialize_moderation():
+    moderation_ready = initialize_moderation()
+    if not moderation_ready:
         logger.error("Moderation model unavailable at startup; service running in degraded fallback-only mode")
+    try:
+        vision_service.get_classifier()
+        vision_ready = True
+        logger.info("Vision model ready")
+    except Exception as e:
+        vision_ready = False
+        logger.warning("Could not preload vision model: %s", e)
 
 
 class AnalyzeRequest(BaseModel):
@@ -108,3 +123,16 @@ async def analyze(body: AnalyzeRequest):
 async def health():
     """Process up-check; does not guarantee the transformer finished loading."""
     return {"status": "ok"}
+
+
+@app.get("/ready")
+def readiness():
+    logger.info("Readiness check requested")
+    ready = all([ocr_ready, moderation_ready, vision_ready])
+    return {
+        "status": "ready" if ready else "loading",
+        "ocr_loaded": ocr_ready,
+        "moderation_model_loaded": moderation_ready,
+        "vision_model_loaded": vision_ready,
+        "gpu_available": torch.cuda.is_available(),
+    }

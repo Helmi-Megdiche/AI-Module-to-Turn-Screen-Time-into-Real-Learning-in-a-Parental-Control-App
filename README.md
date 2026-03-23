@@ -309,6 +309,14 @@ Defined in `backend/prisma/schema.prisma`.
 ### 8.2 AI API (`http://127.0.0.1:8000`)
 
 - `GET /health`
+- `GET /ready`
+  - strict readiness for AI components
+  - returns:
+    - `status`: `ready` or `loading`
+    - `ocr_loaded`
+    - `moderation_model_loaded`
+    - `vision_model_loaded`
+    - `gpu_available`
 - `POST /analyze`
   - body: `{ image: "<base64>" }`
 
@@ -444,7 +452,7 @@ Tests in `ai-service/tests/` cover:
 - first startup can be slow due to model downloads
 - AI service keeps local inference only (no external moderation API dependency)
 - fallback is deterministic and available offline
-- health endpoint is liveness, not full readiness
+- use `/health` for liveness and `/ready` for strict model/OCR readiness
 - backend tolerates long AI inference with large timeout
 - mission reward logic intentionally separates child actions from parent-controlled validation for risky content
 
