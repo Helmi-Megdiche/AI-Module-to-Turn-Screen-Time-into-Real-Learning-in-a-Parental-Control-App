@@ -11,7 +11,7 @@ jest.mock('../badgeService', () => ({
 
 const prisma = require('../../config/prisma');
 const { awardAgeBadges } = require('../badgeService');
-const { getProfile, updateInterests, getSummary, getBadges } = require('../userService');
+const { getProfile, updateInterests, updateAge, getSummary, getBadges } = require('../userService');
 
 describe('userService', () => {
   beforeEach(() => {
@@ -55,6 +55,37 @@ describe('userService', () => {
       points: 20,
       interests: ['games', 'reading'],
       engagementScore: 0.37,
+    });
+  });
+
+  test('updateAge persists age and returns normalized profile slice', async () => {
+    prisma.user.update.mockResolvedValue({
+      id: 2,
+      age: 9,
+      points: 30,
+      interests: ['reading'],
+      engagementScore: 0.55,
+    });
+
+    const user = await updateAge(2, 9);
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 2 },
+      data: { age: 9 },
+      select: {
+        id: true,
+        age: true,
+        points: true,
+        interests: true,
+        engagementScore: true,
+      },
+    });
+    expect(user).toEqual({
+      id: 2,
+      age: 9,
+      points: 30,
+      interests: ['reading'],
+      engagementScore: 0.55,
     });
   });
 

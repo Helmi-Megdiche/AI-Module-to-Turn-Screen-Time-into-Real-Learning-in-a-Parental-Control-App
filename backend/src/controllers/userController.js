@@ -1,5 +1,5 @@
 /**
- * Read-only user endpoints: history (analyses + missions), missions list, aggregated summary.
+ * User endpoints: history, missions, summary, badges, profile read, interests/age updates for demo.
  * URL shape: `/api/user/:id/...` — `id` must be a positive integer (same id clients send to `/analyze`).
  */
 const userService = require('../services/userService');
@@ -299,6 +299,39 @@ async function updateInterests(req, res) {
   }
 }
 
+/** `PUT /api/user/:id/age` — set child age for personalization (and badge ranges). */
+async function updateAge(req, res) {
+  try {
+    const userId = getUserIdOr400(req, res);
+    if (userId === null) {
+      return;
+    }
+
+    const age = req.body?.age;
+    if (typeof age !== 'number' || !Number.isInteger(age) || age < 0 || age > 120) {
+      return res.status(400).json({
+        success: false,
+        message: 'Age must be a number between 0 and 120',
+      });
+    }
+
+    const user = await userService.updateAge(userId, age);
+    return res.json({ success: true, user });
+  } catch (err) {
+    console.error(err);
+    if (err?.code === 'P2025') {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to update age',
+    });
+  }
+}
+
 module.exports = {
   getHistory,
   getMissions,
@@ -306,4 +339,5 @@ module.exports = {
   getSummary,
   getProfile,
   updateInterests,
+  updateAge,
 };

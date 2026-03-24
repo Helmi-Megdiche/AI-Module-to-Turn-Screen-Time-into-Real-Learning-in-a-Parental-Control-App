@@ -181,6 +181,9 @@ Main file: `backend/src/services/userService.js`
   - accepts and persists only allowed values:
     - `games`, `reading`, `science`, `sports`, `art`, `music`, `technology`, `logic`, `creativity`
   - normalizes to lowercase and removes duplicates
+- `PUT /api/user/:id/age`:
+  - request body: `{ "age": 12 }` (JSON number, integer, `0`–`120`)
+  - updates `User.age` and returns `{ success, user }` with the same compact profile fields as `GET /api/user/:id/profile`
 
 ### 5.6 Badge Service
 
@@ -455,6 +458,7 @@ Reward display in Flutter:
 - supports:
   - loading a user profile by id (`GET /api/user/:id/profile`)
   - showing current `engagementScore`, age, and points
+  - editing age with **Save age** (`PUT /api/user/:id/age`) so medium-risk personalization (e.g. `age < 10` → puzzle) is easy to demo
   - selecting interests from predefined checkboxes
   - saving interests via `PUT /api/user/:id/interests`
 - purpose:

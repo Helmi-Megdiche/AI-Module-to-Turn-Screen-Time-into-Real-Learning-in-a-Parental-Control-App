@@ -63,6 +63,29 @@ async function updateInterests(userId, interests) {
   };
 }
 
+/** Update child age and return the same compact profile shape as `getProfile`. */
+async function updateAge(userId, age) {
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { age },
+    select: {
+      id: true,
+      age: true,
+      points: true,
+      interests: true,
+      engagementScore: true,
+    },
+  });
+
+  return {
+    id: updated.id,
+    age: Number(updated.age ?? 0),
+    points: Number(updated.points ?? 0),
+    interests: normalizeInterests(updated.interests),
+    engagementScore: Number(updated.engagementScore ?? 0.5),
+  };
+}
+
 /** Returns analyses + missions for the user, newest first. `null` if user does not exist. */
 async function getHistory(userId, pagination) {
   const user = await getUserById(userId);
@@ -183,6 +206,7 @@ async function getSummary(userId) {
 module.exports = {
   getProfile,
   updateInterests,
+  updateAge,
   getHistory,
   getMissions,
   getBadges,

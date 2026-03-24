@@ -10,5 +10,6 @@ router.get('/:id/badges', userController.getBadges);
 router.get('/:id/summary', userController.getSummary);
 router.get('/:id/profile', userController.getProfile);
 router.put('/:id/interests', userController.updateInterests);
+router.put('/:id/age', userController.updateAge);
 
 module.exports = router;

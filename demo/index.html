@@ -304,6 +304,19 @@
       color: var(--muted);
       font-size: 0.86rem;
     }
+    .profile-age-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0.45rem 0;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+    .profile-age-row #profileAge {
+      width: 4.5rem;
+      padding: 0.35rem 0.45rem;
+    }
     .level-wrap { margin-top: 0.85rem; }
     .level-progress {
       width: 100%;
@@ -1734,15 +1747,19 @@
       }).join("");
 
       const score = Number(user?.engagementScore ?? 0.5);
+      const ageVal = Number(user?.age ?? 0);
       $("profileData").innerHTML =
         '<p class="profile-meta"><strong>Engagement score:</strong> ' +
         (Number.isFinite(score) ? score.toFixed(2) : "0.50") +
         "</p>" +
-        '<p class="profile-meta"><strong>Age:</strong> ' +
-        Number(user?.age ?? 0) +
-        ' · <strong>Points:</strong> ' +
+        '<div class="profile-age-row"><strong>Age:</strong> ' +
+        '<input type="number" id="profileAge" min="0" max="120" value="' +
+        (Number.isFinite(ageVal) ? ageVal : 0) +
+        '" />' +
+        '<button type="button" class="secondary" id="saveAge">Save age</button>' +
+        '<span class="muted">· Points: ' +
         Number(user?.points ?? 0) +
-        "</p>" +
+        "</span></div>" +
         '<div><strong>Interests</strong></div>' +
         '<div class="profile-grid">' +
         checkboxes +
@@ -1781,6 +1798,44 @@
     $("btnLoadProfile").addEventListener("click", loadProfile);
 
     $("profileData").addEventListener("click", async (e) => {
+      const saveAgeBtn = e.target.closest("#saveAge");
+      if (saveAgeBtn) {
+        const id = profileUid();
+        if (!Number.isFinite(id) || id <= 0) {
+          showErr($("profileErr"), "Please enter a valid User ID.");
+          return;
+        }
+        const ageInput = $("profileAge");
+        const age = parseInt(ageInput && ageInput.value, 10);
+        if (!Number.isFinite(age)) {
+          alert("Invalid age.");
+          return;
+        }
+        saveAgeBtn.disabled = true;
+        try {
+          const res = await fetch(apiBase() + "/api/user/" + id + "/age", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ age }),
+          });
+          const data = await readJsonSafe(res);
+          if (!res.ok) {
+            showErr($("profileErr"), data.message || res.statusText);
+            alert(data.message || "Failed to update age.");
+            return;
+          }
+          showErr($("profileErr"), "");
+          alert("Age updated.");
+          await loadProfile();
+        } catch (err) {
+          showErr($("profileErr"), err.message || String(err));
+          alert(err.message || String(err));
+        } finally {
+          saveAgeBtn.disabled = false;
+        }
+        return;
+      }
+
       const btn = e.target.closest("#btnSaveInterests");
       if (!btn) return;
 
