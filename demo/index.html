@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!--
+    Demo single-page UI for end-to-end flows:
+    analyze screenshot -> play/submit interactive missions -> inspect summary/history/badges
+    -> parent validates pending missions.
+  -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PFE Demo — Parental Control</title>
@@ -633,6 +638,8 @@
      */
     const $ = (id) => document.getElementById(id);
 
+    // === Connection and identity helpers ===
+
     /** Backend root URL from the "Connection" field (trailing slash stripped). */
     function apiBase() {
       return $("apiBase").value.replace(/\/$/, "");
@@ -652,12 +659,16 @@
       return Number.isFinite(n) && n >= 0 ? n : 0;
     }
 
+    // === Shared UI state ===
+
     let imageB64 = null;
     let currentMission = null;
     let currentGame = null;
     let gameStartTime = null;
     let ticTacToeBoard = null;
     let gameTimerInterval = null;
+
+    // === Tabs and navigation ===
 
     function switchTab(tabId) {
       document.querySelectorAll(".tab-content").forEach((el) => {
@@ -671,6 +682,8 @@
     document.querySelectorAll(".tab-button").forEach((btn) => {
       btn.addEventListener("click", () => switchTab(btn.dataset.tab));
     });
+
+    // === Image upload handling ===
 
     $("file").addEventListener("change", async (e) => {
       const f = e.target.files && e.target.files[0];
@@ -689,6 +702,8 @@
       $("file").value = "";
       imageB64 = null;
     });
+
+    // === Generic request/UI helpers ===
 
     /** Show inline error text, or hide the error element when msg is empty. */
     function showErr(el, msg) {
@@ -773,6 +788,8 @@
       return String(cat);
     }
 
+    // === Interactive mission widget helpers ===
+
     function setSubmitEnabled(enabled) {
       $("submitGameResult").disabled = !enabled;
     }
@@ -815,6 +832,12 @@
       $("gameWidget").style.display = "none";
     }
 
+    // === Quiz renderer ===
+
+    /**
+     * Render quiz mission UI and local quiz state machine.
+     * @param {Record<string, any>} content Mission content from backend.
+     */
     function renderQuiz(content) {
       const question = escapeHtml(String(content?.question || "Choose the best answer."));
       const choices = Array.isArray(content?.choices) ? content.choices : [];
@@ -881,6 +904,12 @@
       });
     }
 
+    // === Tic-tac-toe renderer and logic ===
+
+    /**
+     * @param {(string|null)[]} board
+     * @returns {"X"|"O"|null}
+     */
     function checkTicTacToeWinner(board) {
       const lines = [
         [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -894,6 +923,10 @@
       return null;
     }
 
+    /**
+     * Build result payload from the current game and submit to `/api/mission/result`.
+     * The backend computes final earned points from mission base + bonus.
+     */
     async function submitCurrentGameResult() {
       if (!currentMission || !currentGame) {
         alert("No interactive mission to submit.");
@@ -971,6 +1004,7 @@
       $("btnHistory").click();
     }
 
+    /** Finalize tic-tac-toe UI state and enable submission. */
     function endTicTacToe(winner) {
       currentGame.gameOver = true;
       document.querySelectorAll(".ttt-cell").forEach((btn) => (btn.disabled = true));
@@ -989,6 +1023,7 @@
       setSubmitEnabled(true);
     }
 
+    /** Apply one player move, then one AI move, then resolve end state if any. */
     function handleTicTacToeMove(idx) {
       if (!Array.isArray(ticTacToeBoard) || currentGame.gameOver || ticTacToeBoard[idx]) return;
       ticTacToeBoard[idx] = "X";
@@ -1031,6 +1066,7 @@
       if (!remaining) endTicTacToe(null);
     }
 
+    /** Render a fresh tic-tac-toe board and reset game status. */
     function renderTicTacToe() {
       ticTacToeBoard = Array(9).fill(null);
       let html = '<div style="display: grid; grid-template-columns: repeat(3, 70px); gap: 8px; justify-content: center;">';
@@ -1054,6 +1090,12 @@
       setGameFeedback("Play until someone wins or it ends in a draw.");
     }
 
+    // === Sudoku renderer and validation ===
+
+    /**
+     * Render sudoku mission UI with check/hint/reset controls.
+     * @param {Record<string, any>} content Mission content from backend.
+     */
     function renderSudoku(content) {
       const baseGrid = Array.isArray(content?.grid) ? content.grid : Array(4).fill(0).map(() => Array(4).fill(0));
       let html = '<table style="border-collapse: collapse; margin: 0 auto;">';
@@ -1132,6 +1174,11 @@
       });
     }
 
+    /**
+     * Validate sudoku cells against provided solution (when available).
+     * @param {boolean} [withFeedback=false] Whether to color cells as correct/incorrect.
+     * @returns {{ success: boolean, correctCount: number, totalEditable: number }}
+     */
     function checkSudokuSolution(withFeedback = false) {
       if (!currentGame || currentGame.type !== "sudoku")
         return { success: false, correctCount: 0, totalEditable: 0 };
@@ -1188,6 +1235,8 @@
       return { success, correctCount, totalEditable };
     }
 
+    // === Analyze flow ===
+
     $("btnAnalyze").addEventListener("click", async () => {
       showErr($("analyzeErr"), "");
       $("analyzeOut").hidden = true;
@@ -1232,6 +1281,7 @@
         $("outRaw").textContent = JSON.stringify(data, null, 2);
 
         const mission = data.mission || null;
+        // Interactive missions are playable only when persisted (valid mission id).
         if (
           mission &&
           Number.isFinite(Number(mission.id)) &&
@@ -1276,6 +1326,8 @@
       }
     });
 
+    // === Interactive mission actions ===
+
     $("submitGameResult").addEventListener("click", async () => {
       try {
         await submitCurrentGameResult();
@@ -1299,6 +1351,8 @@
         renderTicTacToe();
       }
     });
+
+    // === Summary flow ===
 
     $("btnSummary").addEventListener("click", async () => {
       showErr($("summaryErr"), "");
@@ -1354,6 +1408,8 @@
       }
     });
 
+    // === Badges flow ===
+
     $("btnBadges").addEventListener("click", async () => {
       showErr($("badgesErr"), "");
       $("badgesOut").innerHTML = "";
@@ -1391,6 +1447,8 @@
         setActionsDisabled(false);
       }
     });
+
+    // === History flow ===
 
     $("btnHistory").addEventListener("click", async () => {
       showErr($("historyErr"), "");
@@ -1468,6 +1526,8 @@
       }
     });
 
+    // === Parent mission validation flow ===
+
     function missionActionCell(row) {
       if (String(row.status).toLowerCase() !== "pending") {
         return '<span class="muted">—</span>';
@@ -1486,6 +1546,10 @@
       return escapeHtml(String(status || "—"));
     }
 
+    /**
+     * Render parent-facing mission table with validate actions for pending rows.
+     * @param {Array<{id:number, mission:string, points:number, status:string}>} missions
+     */
     function renderMissionsTable(missions) {
       const list = $("missionsList");
       if (!missions.length) {
@@ -1523,6 +1587,7 @@
         "</tbody></table></div>";
     }
 
+    /** Fetch and render missions for the selected parent user id. */
     async function loadMissions() {
       showErr($("missionsErr"), "");
       $("missionsList").innerHTML = "";

@@ -1,4 +1,16 @@
+/**
+ * Badge awarding utilities.
+ *
+ * This service centralizes threshold-based badge assignment for:
+ * - point milestones,
+ * - completed mission milestones,
+ * - age-range badges.
+ *
+ * All award helpers are idempotent (via createMany + skipDuplicates).
+ */
 const prisma = require('../config/prisma');
+
+// === Internal parsing/range helpers ===
 
 function getClient(tx) {
   return tx ?? prisma;
@@ -24,6 +36,17 @@ function inAgeRange(age, requirementValue) {
   return Number.isFinite(min) && Number.isFinite(max) && age >= min && age <= max;
 }
 
+// === Generic award engine ===
+
+/**
+ * Awards all badges of a given type that match the provided predicate.
+ *
+ * @param {number} userId User receiving badges.
+ * @param {'POINT'|'MISSION'|'AGE'} type Badge type to evaluate.
+ * @param {(badge: { id: number, name: string, requirementValue: string }) => boolean} predicate Selection rule.
+ * @param {import('@prisma/client').Prisma.TransactionClient} [tx] Optional transaction client.
+ * @returns {Promise<string[]>} Names of badges that matched the predicate.
+ */
 async function awardByType(userId, type, predicate, tx) {
   const db = getClient(tx);
   const badges = await db.badge.findMany({ where: { type } });
@@ -41,6 +64,17 @@ async function awardByType(userId, type, predicate, tx) {
   return earnable.map((badge) => badge.name);
 }
 
+// === Public badge award APIs ===
+
+/**
+ * Awards point badges crossed between two point totals.
+ *
+ * @param {number} userId User receiving badges.
+ * @param {number} previousPoints Points before update.
+ * @param {number} newPoints Points after update.
+ * @param {import('@prisma/client').Prisma.TransactionClient} [tx] Optional transaction client.
+ * @returns {Promise<string[]>} Names of newly satisfied point badges.
+ */
 async function awardPointBadges(userId, previousPoints, newPoints, tx) {
   const prev = Number(previousPoints ?? 0);
   const next = Number(newPoints ?? 0);
@@ -59,6 +93,15 @@ async function awardPointBadges(userId, previousPoints, newPoints, tx) {
   );
 }
 
+/**
+ * Awards mission badges crossed between two completed-mission totals.
+ *
+ * @param {number} userId User receiving badges.
+ * @param {number} previousCount Completed missions before update.
+ * @param {number} newCount Completed missions after update.
+ * @param {import('@prisma/client').Prisma.TransactionClient} [tx] Optional transaction client.
+ * @returns {Promise<string[]>} Names of newly satisfied mission badges.
+ */
 async function awardMissionBadges(userId, previousCount, newCount, tx) {
   const prev = Number(previousCount ?? 0);
   const next = Number(newCount ?? 0);
@@ -77,6 +120,14 @@ async function awardMissionBadges(userId, previousCount, newCount, tx) {
   );
 }
 
+/**
+ * Awards age badges that match the user's current age bracket.
+ *
+ * @param {number} userId User receiving badges.
+ * @param {number} age User age.
+ * @param {import('@prisma/client').Prisma.TransactionClient} [tx] Optional transaction client.
+ * @returns {Promise<string[]>} Names of age badges matching the provided age.
+ */
 async function awardAgeBadges(userId, age, tx) {
   const numericAge = Number(age);
   if (!Number.isFinite(numericAge) || numericAge < 0) {

@@ -1,3 +1,10 @@
+"""
+Vision moderation service using a local NSFW image classifier.
+
+The module loads ``Falconsai/nsfw_image_detection`` once, reuses it for later calls,
+and exposes ``classify_image`` to return API-compatible risk metadata.
+"""
+
 import logging
 
 from PIL import Image
@@ -10,6 +17,12 @@ _classifier = None
 
 
 def get_classifier():
+    """
+    Return a singleton NSFW classifier pipeline.
+
+    Returns:
+        Any: Hugging Face image-classification pipeline.
+    """
     global _classifier
     if _classifier is None:
         device = 0 if torch.cuda.is_available() else -1
@@ -28,9 +41,14 @@ def get_classifier():
 
 def classify_image(image: Image.Image):
     """
-    Returns a dict:
-        riskScore (float): probability of NSFW content (0-1)
-        matchedKeywords (list): ["nsfw visual"] if riskScore > 0.5 else []
+    Run NSFW classification on a PIL image.
+
+    Args:
+        image: Input screenshot as ``PIL.Image``.
+
+    Returns:
+        dict: ``{"riskScore": float, "matchedKeywords": list[str]}``.
+        ``matchedKeywords`` contains ``"nsfw visual"`` when score > 0.5.
     """
     try:
         pipe = get_classifier()

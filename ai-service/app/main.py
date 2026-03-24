@@ -22,6 +22,8 @@ from app.utils.image_utils import base64_to_pil
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# === Service readiness flags ===
+
 ocr_ready = False
 moderation_ready = False
 vision_ready = False
@@ -30,9 +32,16 @@ vision_ready = False
 app = FastAPI(title="Parental Control AI Service")
 
 
+# === Startup lifecycle ===
+
 @app.on_event("startup")
 def startup_event() -> None:
-    """Preload EasyOCR and the Hugging Face zero-shot model (or log degraded mode if load fails)."""
+    """
+    Preload OCR, moderation, and vision models at service startup.
+
+    Returns:
+        None
+    """
     global ocr_ready, moderation_ready, vision_ready
     _cuda = torch.cuda.is_available()
     _device = torch.cuda.get_device_name(0) if _cuda else "cpu"
@@ -81,9 +90,19 @@ class AnalyzeResponse(BaseModel):
     category: str
 
 
+# === API endpoints ===
+
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(body: AnalyzeRequest):
-    """Decode image → orchestrated OCR + moderation → API JSON."""
+    """
+    Analyze one screenshot and return normalized moderation payload.
+
+    Args:
+        body: Request model containing base64 screenshot bytes.
+
+    Returns:
+        AnalyzeResponse: Contract-stable moderation response for backend consumption.
+    """
     if body.image is None:
         raise HTTPException(status_code=400, detail="Missing `image` field")
     if not str(body.image).strip():
@@ -108,6 +127,8 @@ async def analyze(body: AnalyzeRequest):
         logger.exception("OCR failed")
         raise HTTPException(status_code=500, detail=f"OCR processing failed: {e}") from e
 
+    # The orchestrator combines text moderation and vision moderation,
+    # then returns a conservative final score/category for the backend contract.
     result = build_analyze_response_from_plain_text(text or "", pil)
 
     return AnalyzeResponse(
@@ -121,12 +142,23 @@ async def analyze(body: AnalyzeRequest):
 
 @app.get("/health")
 async def health():
-    """Process up-check; does not guarantee the transformer finished loading."""
+    """
+    Lightweight liveness probe.
+
+    Returns:
+        dict: Basic process status only.
+    """
     return {"status": "ok"}
 
 
 @app.get("/ready")
 def readiness():
+    """
+    Strict readiness probe for all preloaded models.
+
+    Returns:
+        dict: Readiness flags for OCR, moderation, vision, and GPU availability.
+    """
     logger.info("Readiness check requested")
     ready = all([ocr_ready, moderation_ready, vision_ready])
     return {

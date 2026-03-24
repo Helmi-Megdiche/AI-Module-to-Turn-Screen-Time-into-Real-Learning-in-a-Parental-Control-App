@@ -45,6 +45,8 @@ _startup_initialization_attempted = False
 _degraded_mode = False
 _degraded_reason = ""
 
+# === Public data model ===
+
 
 @dataclass(frozen=True)
 class ModerationResult:
@@ -59,8 +61,15 @@ class ModerationResult:
     fallback_reason: str | None = None
 
 
+# === Model/dependency initialization ===
+
 def _build_classifier():
-    """Construct Hugging Face ``pipeline("zero-shot-classification", ...)`` on GPU if CUDA is available."""
+    """
+    Construct the zero-shot classifier pipeline.
+
+    Returns:
+        Any: Hugging Face pipeline configured for local inference (GPU when available, CPU otherwise).
+    """
     device = 0 if torch.cuda.is_available() else -1
     logger.info(
         "Zero-shot classifier device: %s",
@@ -77,7 +86,12 @@ def _build_classifier():
 
 
 def _missing_dependencies() -> list[str]:
-    """Return human-readable PyPI names for any optional ML deps not importable."""
+    """
+    Detect missing runtime dependencies required by the zero-shot model.
+
+    Returns:
+        list[str]: Missing package names in pip-install format.
+    """
     required_modules = (
         ("transformers", "transformers"),
         ("torch", "torch"),
@@ -89,7 +103,15 @@ def _missing_dependencies() -> list[str]:
 
 
 def _run_smoke_inference(classifier: Any) -> None:
-    """Sanity-check the pipeline after weights load (fail fast on bad HF outputs)."""
+    """
+    Execute a tiny inference to validate model outputs after startup load.
+
+    Args:
+        classifier: Initialized Hugging Face zero-shot pipeline.
+
+    Returns:
+        None
+    """
     smoke = classifier(
         "This is a harmless test sentence.",
         [hypothesis for hypothesis, _label in ZERO_SHOT_LABELS],
@@ -101,7 +123,15 @@ def _run_smoke_inference(classifier: Any) -> None:
 
 
 def _build_classifier_with_timeout(timeout_seconds: int) -> Any:
-    """Load heavy weights in a daemon thread so the HTTP server can still bind if startup is slow."""
+    """
+    Build classifier with a bounded startup wait.
+
+    Args:
+        timeout_seconds: Maximum number of seconds allowed for model loading.
+
+    Returns:
+        Any: Initialized Hugging Face classifier pipeline.
+    """
     outcome: dict[str, Any] = {}
     error: dict[str, BaseException] = {}
 
@@ -126,14 +156,27 @@ def _build_classifier_with_timeout(timeout_seconds: int) -> Any:
 
 
 def _set_degraded(reason: str) -> None:
-    """Mark service as running without a working transformer (fallback-only)."""
+    """
+    Enable fallback-only degraded mode.
+
+    Args:
+        reason: Human-readable reason for degraded state.
+
+    Returns:
+        None
+    """
     global _degraded_mode, _degraded_reason
     _degraded_mode = True
     _degraded_reason = reason
 
 
 def _clear_degraded() -> None:
-    """Reset degraded flags after a successful model load."""
+    """
+    Clear degraded-mode flags after successful startup.
+
+    Returns:
+        None
+    """
     global _degraded_mode, _degraded_reason
     _degraded_mode = False
     _degraded_reason = ""
@@ -144,6 +187,9 @@ def initialize_moderation() -> bool:
     Called once at FastAPI startup. Returns ``True`` if the model loaded and smoke inference passed.
 
     On failure, sets **degraded** state so later calls use rule-only moderation.
+
+    Returns:
+        bool: True when model load + smoke inference succeed, False otherwise.
     """
     global _classifier, _startup_initialization_attempted
     _startup_initialization_attempted = True
@@ -164,14 +210,24 @@ def initialize_moderation() -> bool:
 
 
 def _ensure_initialized() -> None:
-    """Lazy-init path (used on first classify if startup skipped)."""
+    """
+    Trigger one-time startup initialization when needed.
+
+    Returns:
+        None
+    """
     if _startup_initialization_attempted:
         return
     initialize_moderation()
 
 
 def get_classifier():
-    """Return the Hugging Face pipeline or raise if still unavailable."""
+    """
+    Return initialized classifier or raise when unavailable.
+
+    Returns:
+        Any: Ready zero-shot classifier.
+    """
     _ensure_initialized()
     if _classifier is None:
         reason = _degraded_reason or "classifier unavailable"
@@ -180,13 +236,26 @@ def get_classifier():
 
 
 def is_classifier_ready() -> bool:
-    """``True`` when weights loaded and we are not in degraded fallback mode."""
+    """
+    Report model readiness for production inference.
+
+    Returns:
+        bool: True when model weights are loaded and degraded mode is off.
+    """
     _ensure_initialized()
     return _classifier is not None and not _degraded_mode
 
 
 def category_from_model_score(score: float) -> str:
-    """Map aggregate risk score to API labels using ``RISKY_THRESHOLD`` / ``DANGEROUS_THRESHOLD``."""
+    """
+    Convert numeric risk score to API category.
+
+    Args:
+        score: Risk score in [0, 1].
+
+    Returns:
+        str: One of ``safe``, ``risky``, ``dangerous``.
+    """
     if score >= DANGEROUS_THRESHOLD:
         return "dangerous"
     if score >= RISKY_THRESHOLD:
@@ -195,12 +264,28 @@ def category_from_model_score(score: float) -> str:
 
 
 def _normalized_text_length(text: str) -> int:
-    """Count non-whitespace characters — used to reject very short OCR noise before ML."""
+    """
+    Count non-whitespace characters in OCR text.
+
+    Args:
+        text: OCR text candidate.
+
+    Returns:
+        int: Character count excluding whitespace.
+    """
     return len(re.sub(r"\s+", "", text or ""))
 
 
 def _label_scores_from_hf_raw(raw: dict[str, Any]) -> dict[str, float]:
-    """Pure: map Hugging Face zero-shot output to internal short-label → score."""
+    """
+    Map raw Hugging Face output to internal moderation labels.
+
+    Args:
+        raw: Raw output from zero-shot pipeline.
+
+    Returns:
+        dict[str, float]: Internal label -> probability score.
+    """
     labels = [str(label).strip() for label in raw.get("labels", [])]
     scores = [float(score) for score in raw.get("scores", [])]
     hypothesis_to_label = {hypothesis: label for hypothesis, label in ZERO_SHOT_LABELS}
@@ -213,13 +298,29 @@ def _label_scores_from_hf_raw(raw: dict[str, Any]) -> dict[str, float]:
 
 
 def _cached_pairs_from_label_scores(label_scores: dict[str, float]) -> tuple[tuple[str, float], ...]:
-    """Stable tuple for ``lru_cache`` (sorted items)."""
+    """
+    Convert mutable dict scores into a stable tuple for caching.
+
+    Args:
+        label_scores: Internal label -> score mapping.
+
+    Returns:
+        tuple[tuple[str, float], ...]: Sorted key/value tuple.
+    """
     return tuple(sorted(label_scores.items()))
 
 
 @lru_cache(maxsize=CACHE_SIZE)
 def _classify_zero_shot_cached(cleaned: str) -> tuple[tuple[str, float], ...]:
-    """Run multi-label zero-shot on the cleaned OCR string; map HF hypotheses to short labels."""
+    """
+    Run cached zero-shot moderation on cleaned OCR text.
+
+    Args:
+        cleaned: Stripped OCR text.
+
+    Returns:
+        tuple[tuple[str, float], ...]: Sorted moderation label-score tuples.
+    """
     classifier = get_classifier()
     raw = classifier(
         cleaned,
@@ -232,7 +333,15 @@ def _classify_zero_shot_cached(cleaned: str) -> tuple[tuple[str, float], ...]:
 
 
 def _extract_scores(label_scores: dict[str, float]) -> tuple[float, list[str]]:
-    """Max score = risk; list labels above ``MATCHED_KEYWORDS_THRESHOLD`` for explainability."""
+    """
+    Derive API-ready risk + matched labels from per-label scores.
+
+    Args:
+        label_scores: Internal label -> score mapping.
+
+    Returns:
+        tuple[float, list[str]]: Rounded risk score and sorted matched labels.
+    """
     risk_score = max(label_scores.values(), default=0.0)
     matched = [
         label
@@ -243,7 +352,16 @@ def _extract_scores(label_scores: dict[str, float]) -> tuple[float, list[str]]:
 
 
 def _fallback_result(text: str, reason: str) -> ModerationResult:
-    """Wrap ``risk_scoring.analyze_text`` into the same ``ModerationResult`` shape as the model path."""
+    """
+    Build a ``ModerationResult`` using deterministic fallback rules.
+
+    Args:
+        text: OCR text to analyze with fallback rules.
+        reason: Why model path was skipped/failed.
+
+    Returns:
+        ModerationResult: Unified moderation result marked as fallback.
+    """
     logger.warning("Fallback moderation: %s", reason)
     fallback = analyze_text_fallback(text)
     return ModerationResult(
@@ -263,6 +381,12 @@ def moderate(text: str) -> ModerationResult:
     Public entry: classify OCR text (transformer or fallback).
 
     Prefer this for tests and ``evaluate_moderation.py``; HTTP uses ``analyze_text`` which wraps this.
+
+    Args:
+        text: OCR text.
+
+    Returns:
+        ModerationResult: Final moderation output used by API orchestration.
     """
     cleaned = (text or "").strip()
     if not cleaned:
@@ -295,7 +419,15 @@ def moderate(text: str) -> ModerationResult:
 
 
 def analyze_text(text: str) -> RiskAnalysis:
-    """Thin adapter to ``RiskAnalysis`` for ``main.py`` (no category field — HTTP adds it via ``category_from_model_score``)."""
+    """
+    Convert moderation output to legacy ``RiskAnalysis`` shape expected by orchestrator code.
+
+    Args:
+        text: OCR text.
+
+    Returns:
+        RiskAnalysis: Backward-compatible moderation payload.
+    """
     result = moderate(text)
     return RiskAnalysis(
         matched_keywords=result.matched_keywords,
