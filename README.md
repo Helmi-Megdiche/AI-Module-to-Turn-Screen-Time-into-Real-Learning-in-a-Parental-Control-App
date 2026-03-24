@@ -284,11 +284,17 @@ Main file: `ai-service/app/services/risk_scoring.py`
 
 Main file: `ai-service/app/services/vision_service.py`
 
-- model: `Falconsai/nsfw_image_detection`
+- model: `ml6team/violence-and-nsfw`
 - lazy-loaded classifier, GPU if available
+- model classes used by service:
+  - `nsfw`
+  - `violence`
+  - `safe`
 - returns:
-  - `riskScore` (nsfw probability)
-  - `matchedKeywords = ["nsfw visual"]` when score > `0.5`
+  - `riskScore = max(nsfw_score, violence_score)`
+  - `matchedKeywords`:
+    - `nsfw visual` when `nsfw_score > VISION_MATCHED_KEYWORDS_THRESHOLD`
+    - `violence visual` when `violence_score > VISION_MATCHED_KEYWORDS_THRESHOLD`
 - fail-safe behavior: on exception, returns zero visual risk
 
 ### 6.7 Orchestration
@@ -463,6 +469,8 @@ From `ai-service/app/config.py`:
 - `MODERATION_SHORT_TEXT_FALLBACK_THRESHOLD`
 - `MODERATION_CACHE_SIZE`
 - `MODERATION_STARTUP_MODEL_LOAD_TIMEOUT_SECONDS`
+- `VISION_MODEL_NAME` (default `ml6team/violence-and-nsfw`)
+- `VISION_MATCHED_KEYWORDS_THRESHOLD` (default `0.5`)
 
 ### 9.3 Test Runner Environment
 
