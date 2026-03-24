@@ -379,10 +379,6 @@
       color: #000;
       border: 1px solid #ccc;
     }
-    .sudoku-cell {
-      background: #fff;
-      color: #000;
-    }
     .ttt-cell {
       border-radius: 12px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -407,21 +403,41 @@
       0% { transform: scale(0.85); }
       100% { transform: scale(1); }
     }
-    .sudoku-cell {
-      width: 45px !important;
-      height: 45px !important;
+    /* Sudoku: all inputs in the table (fixed = disabled without .sudoku-class on some builds) */
+    .sudoku-table {
+      margin: 0.5rem auto 0;
+      border-collapse: collapse;
+    }
+    .sudoku-table td {
+      padding: 2px;
+    }
+    .sudoku-table input {
+      width: 55px;
+      height: 55px;
+      box-sizing: border-box;
       text-align: center;
-      font-size: 1.1rem;
-      border: 1px solid #dee2e6 !important;
+      font-size: 1.2rem;
+      border: 1px solid #888;
       border-radius: 4px;
+      background: #fff;
+      color: #000;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    }
+    .sudoku-table input:disabled,
+    .sudoku-cell[disabled] {
+      background: #e9ecef;
+      color: #495057;
+      font-weight: bold;
     }
     .sudoku-cell.correct {
-      background: #d1e7dd;
+      background: #d1e7dd !important;
       border-color: #198754 !important;
+      color: #0f5132;
     }
     .sudoku-cell.incorrect {
-      background: #f8d7da;
+      background: #f8d7da !important;
       border-color: #dc3545 !important;
+      color: #842029;
     }
     .quiz-option {
       background: #fff;
@@ -1162,17 +1178,22 @@
      */
     function renderSudoku(content) {
       const baseGrid = Array.isArray(content?.grid) ? content.grid : Array(4).fill(0).map(() => Array(4).fill(0));
-      let html = '<table style="border-collapse: collapse; margin: 0 auto;">';
+      let html = '<table class="sudoku-table">';
       for (let i = 0; i < 4; i++) {
         html += "<tr>";
         for (let j = 0; j < 4; j++) {
           const val = Number(baseGrid?.[i]?.[j] ?? 0);
           const isFixed = Number.isFinite(val) && val !== 0;
-          html += '<td style="border:1px solid #ccc; padding:5px;">';
+          html += "<td>";
           if (isFixed) {
-            html += '<input type="text" value="' + val + '" disabled style="width:40px;text-align:center;">';
+            html += '<input type="text" value="' + val + '" disabled inputmode="numeric" maxlength="1" aria-readonly="true">';
           } else {
-            html += '<input type="text" class="sudoku-cell" data-row="' + i + '" data-col="' + j + '" style="width:40px;text-align:center;">';
+            html +=
+              '<input type="text" class="sudoku-cell" data-row="' +
+              i +
+              '" data-col="' +
+              j +
+              '" inputmode="numeric" maxlength="1" autocomplete="off">';
           }
           html += "</td>";
         }

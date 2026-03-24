@@ -442,7 +442,7 @@ Reward display in Flutter:
 - keeps legacy mission text rendering (`mission.mission`) unchanged
 - when mission type is interactive:
   - `quiz` -> renders option cards with a check-answer step and feedback before submit
-  - `puzzle` with `sudoku4x4` -> renders 4x4 sudoku with check/reset/hint controls and per-cell feedback
+  - `puzzle` with `sudoku4x4` -> renders 4x4 sudoku with check/reset/hint controls and per-cell feedback (`.sudoku-table` CSS: high-contrast cells, clue vs editable styling, 55px inputs with light shadow)
   - `mini_game` -> renders tic-tac-toe with reset/play-again controls and explicit end-state messaging
 - submits game outcome to `POST /api/mission/result` and then refreshes summary/history
 - accessibility/readability hardening:
