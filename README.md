@@ -2,6 +2,7 @@
 
 Full technical documentation for the PFE project: a parental control platform that analyzes screenshots, detects risky content with local AI, and turns outcomes into age-aware educational missions and gamified progression.
 
+
 ## 1) Project Purpose
 
 This system transforms passive screen time into guided real-world learning:
@@ -45,13 +46,15 @@ flowchart LR
 5. AI result is normalized to:
    - `text`, `displayText`, `matchedKeywords`, `riskScore`, `category`
 6. Backend creates `Analysis` + `Mission` (legacy text + optional structured interactive content).
-7. Points logic:
+7. Mission personalization uses user profile (`interests`, `engagementScore`, `age`) with risk-aware routing.
+8. Points logic:
    - safe `real_world` missions (`riskScore < 0.3`): immediate points only if cooldown + daily cap allow it
    - interactive missions (`quiz`, `puzzle`, `mini_game`): points awarded via `POST /api/mission/result` using `base + bonus`
    - parent completion endpoint keeps `completedMissions` logic and avoids double-point award for interactive missions
-8. Badge logic runs on point, mission-completion, and age conditions.
-9. Parent dashboard endpoints expose history, missions, summary, and earned badges.
-10. Demo Analyze tab can render interactive widgets for mission types (`quiz`, `puzzle`, `mini_game`) and submit outcomes to `/api/mission/result`.
+9. Badge logic runs on point, mission-completion, and age conditions.
+10. Engagement score is recalculated after each submitted mission result from recent outcomes.
+11. Parent dashboard endpoints expose history, missions, summary, and earned badges.
+12. Demo Analyze tab can render interactive widgets for mission types (`quiz`, `puzzle`, `mini_game`) and submit outcomes to `/api/mission/result`.
 
 ## 5) Backend (Node.js / Express / Prisma)
 
@@ -74,10 +77,14 @@ flowchart LR
 Main file: `backend/src/services/analyzeService.js`
 
 - validates and normalizes AI payload
-- mission generation:
-  - `real_world` for low risk
-  - `puzzle` for medium risk
-  - `quiz` / `mini_game` for dangerous risk (based on matched labels)
+- mission generation (personalized):
+  - `selectMissionType(user, riskScore, category)` uses:
+    - dangerous risk (`> 0.7`) -> `quiz`
+    - interests (`games` -> `mini_game`, `reading` -> `quiz`)
+    - low engagement (`< 0.4`) -> `mini_game`
+    - younger children (`age < 10`) -> `puzzle`
+    - default -> `real_world`
+  - `computeDifficulty(user)` returns `1..3` from `engagementScore`
 - mission persistence includes:
   - `mission` (legacy string text)
   - `type`, `content`, `difficulty`, `points`
@@ -121,12 +128,24 @@ Main files:
 - endpoint: `POST /api/mission/result`
 - transactional behavior:
   - validates mission ownership and mission state
-  - computes `bonusPoints` from mission type + result data (`score`, `success`, `timeSpent`)
+  - computes `bonusPoints` from mission type + result data (`score`, `success`, `timeSpent`) and caps by `reward.maxBonus` when provided
   - creates `MissionResult`
   - auto-completes mission (`status = "completed"`)
-  - increments user `points` by `earnedPoints = mission.points + bonusPoints`
+  - increments user `points` by `earnedPoints = reward.basePoints + bonusPoints` (fallback to `mission.points` if reward is absent)
   - increments `completedMissions` by 1
+  - updates `engagementScore` using recent mission results
   - triggers point and mission badge awarding
+
+### 5.4.1 Engagement Score Formula
+
+After each `POST /api/mission/result`, backend fetches the latest 10 mission results and computes:
+
+- `completionRate = successes / total`
+- `successRate = successes / total` (currently same signal, kept separate for future weighting changes)
+- `streakFactor = min(consecutiveSuccesses / 10, 1)`
+- `engagementScore = 0.4*completionRate + 0.3*successRate + 0.3*streakFactor`
+
+This score is stored on `User.engagementScore` and then reused by personalization/difficulty logic.
 
 ### 5.5 User Read Endpoints
 
@@ -289,6 +308,9 @@ Defined in `backend/prisma/schema.prisma`.
 
 - identity and profile:
   - `id`, `age`, `createdAt`
+- personalization:
+  - `interests` (JSON array, default `[]`)
+  - `engagementScore` (float, default `0.5`)
 - progression:
   - `points`, `completedMissions`
 - anti-farming for safe rewards:
@@ -349,6 +371,42 @@ Defined in `backend/prisma/schema.prisma`.
 - `POST /mission/result`
   - body: `{ missionId, userId, success, score?, timeSpent? }`
   - awards `earnedPoints = base mission points + calculated bonus`
+
+### 8.3 Mission JSON Contract (Flutter-ready)
+
+Each mission returned by `POST /api/analyze` includes:
+
+- top-level:
+  - `type`
+  - `game` (nullable for non-game missions)
+  - `difficulty`
+  - `points` (legacy/base points)
+  - `mission` (legacy text used by existing demo UI)
+- structured payload:
+  - `content.title`
+  - `content.instructions`
+  - `content.data` (game-specific payload)
+  - `content.reward = { basePoints, maxBonus }`
+
+Backward compatibility:
+
+- `mission.mission` is always preserved for existing consumers.
+- existing game fields (`question`, `choices`, `correctAnswer`, `grid`, `game`, etc.) remain available in `content` for legacy renderers.
+
+### 8.4 Flutter Integration Mapping
+
+Recommended widget routing:
+
+- `type = quiz`, `game = quiz` -> quiz card / multiple-choice widget
+- `type = puzzle`, `game = sudoku4x4` -> sudoku widget
+- `type = mini_game`, `game = tic_tac_toe` -> tic-tac-toe widget
+- `type = real_world` -> task card using `mission` + `content.instructions`
+
+Reward display in Flutter:
+
+- show base reward from `content.reward.basePoints`
+- show bonus cap from `content.reward.maxBonus`
+- compute total at result time using backend response from `POST /api/mission/result`
 
 ### 8.1.1 Demo interactive mission widget behavior
 
