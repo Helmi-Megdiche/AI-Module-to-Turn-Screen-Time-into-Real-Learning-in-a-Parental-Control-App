@@ -26,18 +26,27 @@ function normalizeInterests(rawInterests) {
  * @returns {'quiz'|'mini_game'|'puzzle'|'real_world'}
  */
 function selectMissionType(user, riskScore, _category) {
-  if (riskScore > 0.7) return 'quiz';
-
   const interests = normalizeInterests(user?.interests);
-  if (interests.includes('games')) return 'mini_game';
-  if (interests.includes('reading')) return 'quiz';
-
   const engagementScore = Number(user?.engagementScore ?? 0.5);
-  if (Number.isFinite(engagementScore) && engagementScore < 0.4) return 'mini_game';
-
   const age = Number(user?.age ?? 0);
-  if (Number.isFinite(age) && age < 10) return 'puzzle';
 
+  // For dangerous content (risk > 0.7)
+  if (riskScore > 0.7) {
+    if (interests.includes('games')) return 'mini_game';
+    if (engagementScore < 0.4) return 'mini_game';
+    return 'quiz';
+  }
+
+  // For medium risk (0.3–0.7)
+  if (riskScore > 0.3) {
+    if (interests.includes('games')) return 'mini_game';
+    if (interests.includes('reading')) return 'quiz';
+    if (engagementScore < 0.4) return 'mini_game';
+    if (Number.isFinite(age) && age < 10) return 'puzzle';
+    return 'real_world';
+  }
+
+  // Safe content (<0.3)
   return 'real_world';
 }
 

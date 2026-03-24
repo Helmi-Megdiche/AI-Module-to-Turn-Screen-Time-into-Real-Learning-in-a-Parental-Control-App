@@ -79,11 +79,16 @@ Main file: `backend/src/services/analyzeService.js`
 - validates and normalizes AI payload
 - mission generation (personalized):
   - `selectMissionType(user, riskScore, category)` uses:
-    - dangerous risk (`> 0.7`) -> `quiz`
-    - interests (`games` -> `mini_game`, `reading` -> `quiz`)
-    - low engagement (`< 0.4`) -> `mini_game`
-    - younger children (`age < 10`) -> `puzzle`
-    - default -> `real_world`
+    - dangerous risk (`> 0.7`):
+      - `games` interest -> `mini_game`
+      - low engagement (`< 0.4`) -> `mini_game`
+      - otherwise -> `quiz`
+    - medium risk (`0.3–0.7`):
+      - interests (`games` -> `mini_game`, `reading` -> `quiz`)
+      - low engagement (`< 0.4`) -> `mini_game`
+      - younger children (`age < 10`) -> `puzzle`
+      - otherwise -> `real_world`
+    - safe risk (`<= 0.3`) -> `real_world`
   - `computeDifficulty(user)` returns `1..3` from `engagementScore`
 - mission persistence includes:
   - `mission` (legacy string text)

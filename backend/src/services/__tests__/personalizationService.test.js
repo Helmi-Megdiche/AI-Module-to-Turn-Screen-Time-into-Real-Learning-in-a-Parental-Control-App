@@ -19,10 +19,30 @@ describe('personalizationService.normalizeInterests', () => {
 });
 
 describe('personalizationService.selectMissionType', () => {
-  test('dangerous risk always routes to quiz', () => {
+  test('dangerous risk routes to mini_game when interests include games', () => {
     expect(
       selectMissionType(
         { age: 12, interests: ['games'], engagementScore: 0.1 },
+        0.9,
+        'dangerous'
+      )
+    ).toBe('mini_game');
+  });
+
+  test('dangerous risk routes to mini_game when engagement is low', () => {
+    expect(
+      selectMissionType(
+        { age: 12, interests: [], engagementScore: 0.2 },
+        0.9,
+        'dangerous'
+      )
+    ).toBe('mini_game');
+  });
+
+  test('dangerous risk defaults to quiz when no games interest and engagement is not low', () => {
+    expect(
+      selectMissionType(
+        { age: 12, interests: ['reading'], engagementScore: 0.8 },
         0.9,
         'dangerous'
       )
@@ -49,22 +69,22 @@ describe('personalizationService.selectMissionType', () => {
     ).toBe('quiz');
   });
 
-  test('low engagement routes to mini_game', () => {
+  test('low engagement with safe risk routes to real_world', () => {
     expect(
       selectMissionType(
         { age: 11, interests: [], engagementScore: 0.2 },
         0.2,
         'safe'
       )
-    ).toBe('mini_game');
+    ).toBe('real_world');
   });
 
   test('age under 10 routes to puzzle when no higher-priority rule matches', () => {
     expect(
       selectMissionType(
         { age: 9, interests: [], engagementScore: 0.8 },
-        0.2,
-        'safe'
+        0.5,
+        'risky'
       )
     ).toBe('puzzle');
   });
