@@ -443,6 +443,7 @@ Reward display in Flutter:
 - when mission type is interactive:
   - `quiz` -> renders option cards with a check-answer step and feedback before submit
   - `puzzle` with `sudoku4x4` -> renders 4x4 sudoku with check/reset/hint controls and per-cell feedback (`.sudoku-table` CSS: high-contrast cells, clue vs editable styling, 55px inputs with light shadow)
+  - **Sudoku widget (demo):** when the mission payload has both `grid` and `solution` (e.g. `content.data` or legacy `content`), the demo uses them; otherwise it generates a **random valid 4×4** puzzle in the browser (`difficulty` 1–3 removes 6 / 8 / 10 cells). The same generated puzzle is kept for **Reset** until a new analyze run clears the widget. **Hint** fills a **random** empty editable cell from the stored solution; **Check** marks cells correct/incorrect against that solution before **Submit**.
   - `mini_game` -> renders tic-tac-toe with reset/play-again controls and explicit end-state messaging
 - submits game outcome to `POST /api/mission/result` and then refreshes summary/history
 - accessibility/readability hardening:

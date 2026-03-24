@@ -1172,12 +1172,143 @@
 
     // === Sudoku renderer and validation ===
 
+    /** @param {unknown} g */
+    function isValidSudokuGrid4(g) {
+      return (
+        Array.isArray(g) &&
+        g.length === 4 &&
+        g.every((row) => Array.isArray(row) && row.length === 4)
+      );
+    }
+
+    /**
+     * Generate a valid random 4×4 Sudoku puzzle (symmetries preserve constraints).
+     * @param {number} difficulty 1 (easy), 2 (medium), 3 (hard)
+     * @returns {{ puzzle: number[][], solution: number[][] }}
+     */
+    function generateSudoku4x4(difficulty) {
+      const d = Math.min(3, Math.max(1, Math.floor(Number(difficulty)) || 1));
+      const base = [
+        [1, 2, 3, 4],
+        [3, 4, 1, 2],
+        [2, 1, 4, 3],
+        [4, 3, 2, 1],
+      ];
+      const perm = [1, 2, 3, 4];
+      for (let i = perm.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = perm[i];
+        perm[i] = perm[j];
+        perm[j] = t;
+      }
+      let solution = base.map((row) => row.map((v) => perm[v - 1]));
+
+      const swapRows = (r1, r2) => {
+        const tmp = solution[r1];
+        solution[r1] = solution[r2];
+        solution[r2] = tmp;
+      };
+      if (Math.random() > 0.5) swapRows(0, 1);
+      if (Math.random() > 0.5) swapRows(2, 3);
+      if (Math.random() > 0.5) swapRows(0, 2);
+
+      const swapCols = (c1, c2) => {
+        for (let r = 0; r < 4; r++) {
+          const t = solution[r][c1];
+          solution[r][c1] = solution[r][c2];
+          solution[r][c2] = t;
+        }
+      };
+      if (Math.random() > 0.5) swapCols(0, 1);
+      if (Math.random() > 0.5) swapCols(2, 3);
+      if (Math.random() > 0.5) swapCols(0, 2);
+
+      const puzzle = solution.map((row) => row.slice());
+      const cellsToRemove = d === 1 ? 6 : d === 2 ? 8 : 10;
+      let removed = 0;
+      while (removed < cellsToRemove) {
+        const row = Math.floor(Math.random() * 4);
+        const col = Math.floor(Math.random() * 4);
+        if (puzzle[row][col] !== 0) {
+          puzzle[row][col] = 0;
+          removed++;
+        }
+      }
+      return { puzzle, solution };
+    }
+
+    /**
+     * Resolve puzzle + solution from mission content, cache, or generator.
+     * @param {Record<string, any>} content Mission `content` from API
+     */
+    function resolveSudokuPuzzleAndSolution(content) {
+      const data = content && content.data;
+      if (isValidSudokuGrid4(data?.grid) && isValidSudokuGrid4(data?.solution)) {
+        return {
+          puzzle: data.grid.map((r) => r.map((v) => Number(v))),
+          solution: data.solution.map((r) => r.map((v) => Number(v))),
+        };
+      }
+      if (isValidSudokuGrid4(content?.grid) && isValidSudokuGrid4(content?.solution)) {
+        return {
+          puzzle: content.grid.map((r) => r.map((v) => Number(v))),
+          solution: content.solution.map((r) => r.map((v) => Number(v))),
+        };
+      }
+      const mission = currentMission;
+      if (
+        mission?.generatedPuzzle &&
+        isValidSudokuGrid4(mission.generatedPuzzle.grid) &&
+        isValidSudokuGrid4(mission.generatedPuzzle.solution)
+      ) {
+        return {
+          puzzle: mission.generatedPuzzle.grid.map((r) => r.map((v) => Number(v))),
+          solution: mission.generatedPuzzle.solution.map((r) => r.map((v) => Number(v))),
+        };
+      }
+      const diff = mission?.difficulty != null ? mission.difficulty : 1;
+      const gen = generateSudoku4x4(diff);
+      if (mission) {
+        mission.generatedPuzzle = {
+          grid: gen.puzzle.map((r) => r.slice()),
+          solution: gen.solution.map((r) => r.slice()),
+        };
+      }
+      return { puzzle: gen.puzzle, solution: gen.solution };
+    }
+
+    function sudokuHint() {
+      if (!currentGame || currentGame.type !== "sudoku") {
+        setGameFeedback("No hint available for this puzzle.");
+        return;
+      }
+      const solution = currentGame.solution;
+      if (!solution || !Array.isArray(solution)) {
+        setGameFeedback("No solution data available.");
+        return;
+      }
+      const cells = document.querySelectorAll(".sudoku-cell:not([disabled])");
+      const emptyCells = Array.from(cells).filter((cell) => cell.value.trim() === "");
+      if (emptyCells.length === 0) {
+        setGameFeedback("No empty cells left for a hint.");
+        return;
+      }
+      const randomCell = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+      const row = Number(randomCell.dataset.row);
+      const col = Number(randomCell.dataset.col);
+      const correctValue = solution[row][col];
+      randomCell.value = String(correctValue);
+      setGameFeedback("Hint applied to one cell.");
+    }
+
     /**
      * Render sudoku mission UI with check/hint/reset controls.
      * @param {Record<string, any>} content Mission content from backend.
      */
     function renderSudoku(content) {
-      const baseGrid = Array.isArray(content?.grid) ? content.grid : Array(4).fill(0).map(() => Array(4).fill(0));
+      const { puzzle, solution } = resolveSudokuPuzzleAndSolution(content || {});
+      const baseGrid = puzzle;
+
       let html = '<table class="sudoku-table">';
       for (let i = 0; i < 4; i++) {
         html += "<tr>";
@@ -1186,7 +1317,14 @@
           const isFixed = Number.isFinite(val) && val !== 0;
           html += "<td>";
           if (isFixed) {
-            html += '<input type="text" value="' + val + '" disabled inputmode="numeric" maxlength="1" aria-readonly="true">';
+            html +=
+              '<input type="text" class="sudoku-cell" value="' +
+              val +
+              '" disabled inputmode="numeric" maxlength="1" aria-readonly="true" data-row="' +
+              i +
+              '" data-col="' +
+              j +
+              '">';
           } else {
             html +=
               '<input type="text" class="sudoku-cell" data-row="' +
@@ -1210,7 +1348,8 @@
       currentGame = {
         type: "sudoku",
         baseGrid,
-        solution: Array.isArray(content?.solution) ? content.solution : null,
+        puzzle: baseGrid,
+        solution,
         checked: false,
         success: false,
       };
@@ -1234,89 +1373,39 @@
       });
 
       $("sudokuReset").addEventListener("click", () => renderSudoku(content));
-      $("sudokuHint").addEventListener("click", () => {
-        if (!currentGame.solution || !Array.isArray(currentGame.solution)) {
-          setGameFeedback("No hint available for this puzzle.");
-          return;
-        }
-        const empties = Array.from(document.querySelectorAll(".sudoku-cell")).filter(
-          (cell) => !Number.isFinite(parseInt(cell.value, 10))
-        );
-        if (!empties.length) {
-          setGameFeedback("No empty cells left for a hint.");
-          return;
-        }
-        const cell = empties[0];
-        const row = Number(cell.dataset.row);
-        const col = Number(cell.dataset.col);
-        const hintVal = Number(currentGame.solution?.[row]?.[col]);
-        if (!Number.isFinite(hintVal)) {
-          setGameFeedback("No hint available for this cell.");
-          return;
-        }
-        cell.value = String(hintVal);
-        setGameFeedback("Hint applied to one cell.");
-      });
+      $("sudokuHint").addEventListener("click", () => sudokuHint());
     }
 
     /**
-     * Validate sudoku cells against provided solution (when available).
+     * Validate editable cells against stored solution.
      * @param {boolean} [withFeedback=false] Whether to color cells as correct/incorrect.
      * @returns {{ success: boolean, correctCount: number, totalEditable: number }}
      */
     function checkSudokuSolution(withFeedback = false) {
       if (!currentGame || currentGame.type !== "sudoku")
         return { success: false, correctCount: 0, totalEditable: 0 };
-      const baseGrid = currentGame.baseGrid || Array(4).fill(0).map(() => Array(4).fill(0));
-      const finalGrid = baseGrid.map((row) => row.slice());
-      const cells = document.querySelectorAll(".sudoku-cell");
+      const solution = currentGame.solution;
+      if (!solution || !Array.isArray(solution))
+        return { success: false, correctCount: 0, totalEditable: 0 };
+
+      const cells = document.querySelectorAll(".sudoku-cell:not([disabled])");
       let correctCount = 0;
-      let totalEditable = 0;
+      const totalEditable = cells.length;
+
       for (const cell of cells) {
         const row = Number(cell.dataset.row);
         const col = Number(cell.dataset.col);
-        const val = parseInt(cell.value, 10);
-        if (!Number.isFinite(val))
-          return { success: false, correctCount, totalEditable: cells.length };
-        finalGrid[row][col] = val;
-        totalEditable += 1;
-      }
-      let success = false;
-      if (currentGame.solution) {
-        const solutionFlat = currentGame.solution.flat
-          ? currentGame.solution.flat()
-          : currentGame.solution;
-        const userFlat = finalGrid.flat();
-        success = JSON.stringify(userFlat) === JSON.stringify(solutionFlat);
+        const userVal = parseInt(cell.value, 10);
+        const correctVal = Number(solution[row]?.[col]);
+        const isCorrect = Number.isFinite(userVal) && userVal === correctVal;
+        if (isCorrect) correctCount++;
         if (withFeedback) {
-          cells.forEach((cell) => {
-            const row = Number(cell.dataset.row);
-            const col = Number(cell.dataset.col);
-            const val = Number(finalGrid[row][col]);
-            const solVal = Number(currentGame.solution?.[row]?.[col]);
-            const ok = Number.isFinite(solVal) && val === solVal;
-            cell.classList.remove("correct", "incorrect");
-            cell.classList.add(ok ? "correct" : "incorrect");
-            if (ok) correctCount += 1;
-          });
-        } else {
-          correctCount = success ? totalEditable : 0;
-        }
-      } else {
-        success = finalGrid
-          .flat()
-          .every((v) => Number.isFinite(Number(v)) && Number(v) > 0);
-        if (withFeedback) {
-          cells.forEach((cell) => {
-            const ok = Number.isFinite(parseInt(cell.value, 10));
-            cell.classList.remove("correct", "incorrect");
-            cell.classList.add(ok ? "correct" : "incorrect");
-            if (ok) correctCount += 1;
-          });
-        } else {
-          correctCount = success ? totalEditable : 0;
+          cell.classList.remove("correct", "incorrect");
+          cell.classList.add(isCorrect ? "correct" : "incorrect");
         }
       }
+
+      const success = totalEditable > 0 && correctCount === totalEditable;
       return { success, correctCount, totalEditable };
     }
 
