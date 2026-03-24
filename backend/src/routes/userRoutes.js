@@ -8,5 +8,7 @@ router.get('/:id/history', userController.getHistory);
 router.get('/:id/missions', userController.getMissions);
 router.get('/:id/badges', userController.getBadges);
 router.get('/:id/summary', userController.getSummary);
+router.get('/:id/profile', userController.getProfile);
+router.put('/:id/interests', userController.updateInterests);
 
 module.exports = router;

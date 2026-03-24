@@ -1,5 +1,5 @@
 jest.mock('../../config/prisma', () => ({
-  user: { findUnique: jest.fn() },
+  user: { findUnique: jest.fn(), update: jest.fn() },
   mission: { count: jest.fn() },
   analysis: { count: jest.fn(), aggregate: jest.fn() },
   userBadge: { findMany: jest.fn() },
@@ -11,7 +11,7 @@ jest.mock('../badgeService', () => ({
 
 const prisma = require('../../config/prisma');
 const { awardAgeBadges } = require('../badgeService');
-const { getSummary, getBadges } = require('../userService');
+const { getProfile, updateInterests, getSummary, getBadges } = require('../userService');
 
 describe('userService', () => {
   beforeEach(() => {
@@ -35,6 +35,51 @@ describe('userService', () => {
       level: 3,
       levelTitle: 'Level 3',
       pointsToNextLevel: 450,
+    });
+  });
+
+  test('getProfile returns normalized interests and engagement score', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 1,
+      age: 10,
+      points: 20,
+      interests: ['Games', ' reading ', 'GAMES'],
+      engagementScore: 0.37,
+    });
+
+    const profile = await getProfile(1);
+
+    expect(profile).toEqual({
+      id: 1,
+      age: 10,
+      points: 20,
+      interests: ['games', 'reading'],
+      engagementScore: 0.37,
+    });
+  });
+
+  test('updateInterests writes values and returns normalized payload', async () => {
+    prisma.user.update.mockResolvedValue({
+      id: 3,
+      interests: ['Sports', 'sports', 'ART'],
+      engagementScore: 0.5,
+    });
+
+    const result = await updateInterests(3, ['sports', 'art']);
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 3 },
+      data: { interests: ['sports', 'art'] },
+      select: {
+        id: true,
+        interests: true,
+        engagementScore: true,
+      },
+    });
+    expect(result).toEqual({
+      id: 3,
+      interests: ['sports', 'art'],
+      engagementScore: 0.5,
     });
   });
 

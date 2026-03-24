@@ -3,6 +3,17 @@
  * URL shape: `/api/user/:id/...` — `id` must be a positive integer (same id clients send to `/analyze`).
  */
 const userService = require('../services/userService');
+const ALLOWED_INTERESTS = [
+  'games',
+  'reading',
+  'science',
+  'sports',
+  'art',
+  'music',
+  'technology',
+  'logic',
+  'creativity',
+];
 
 function parsePositiveInt(value) {
   const n = Number(value);
@@ -213,9 +224,86 @@ async function getSummary(req, res) {
   }
 }
 
+/** `GET /api/user/:id/profile` — interests + engagement for demo personalization UI. */
+async function getProfile(req, res) {
+  try {
+    const userId = getUserIdOr400(req, res);
+    if (userId === null) {
+      return;
+    }
+
+    const profile = await userService.getProfile(userId);
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    return res.json({
+      success: true,
+      user: profile,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to load profile',
+    });
+  }
+}
+
+/** `PUT /api/user/:id/interests` — update allowed interests list for personalization. */
+async function updateInterests(req, res) {
+  try {
+    const userId = getUserIdOr400(req, res);
+    if (userId === null) {
+      return;
+    }
+
+    const incoming = req.body?.interests;
+    if (!Array.isArray(incoming)) {
+      return res.status(400).json({
+        success: false,
+        message: 'interests must be an array',
+      });
+    }
+
+    const sanitized = Array.from(
+      new Set(
+        incoming
+          .filter((x) => typeof x === 'string')
+          .map((x) => x.trim().toLowerCase())
+          .filter((x) => ALLOWED_INTERESTS.includes(x))
+      )
+    );
+
+    const result = await userService.updateInterests(userId, sanitized);
+    return res.json({
+      success: true,
+      interests: result.interests,
+      engagementScore: result.engagementScore,
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.code === 'P2025') {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to update interests',
+    });
+  }
+}
+
 module.exports = {
   getHistory,
   getMissions,
   getBadges,
   getSummary,
+  getProfile,
+  updateInterests,
 };

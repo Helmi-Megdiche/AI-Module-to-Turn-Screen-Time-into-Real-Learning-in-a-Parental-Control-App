@@ -3,6 +3,7 @@
  */
 const prisma = require('../config/prisma');
 const { awardAgeBadges } = require('./badgeService');
+const { normalizeInterests } = require('./personalizationService');
 
 const DEFAULT_TAKE = 20;
 const MAX_TAKE = 100;
@@ -16,6 +17,50 @@ function normalizePagination({ skip, take }) {
 
 async function getUserById(userId) {
   return prisma.user.findUnique({ where: { id: userId } });
+}
+
+/** Compact profile payload for demo personalization controls. */
+async function getProfile(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      age: true,
+      points: true,
+      interests: true,
+      engagementScore: true,
+    },
+  });
+  if (!user) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    age: Number(user.age ?? 0),
+    points: Number(user.points ?? 0),
+    interests: normalizeInterests(user.interests),
+    engagementScore: Number(user.engagementScore ?? 0.5),
+  };
+}
+
+/** Persist sanitized interests for a given user id. */
+async function updateInterests(userId, interests) {
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { interests },
+    select: {
+      id: true,
+      interests: true,
+      engagementScore: true,
+    },
+  });
+
+  return {
+    id: updated.id,
+    interests: normalizeInterests(updated.interests),
+    engagementScore: Number(updated.engagementScore ?? 0.5),
+  };
 }
 
 /** Returns analyses + missions for the user, newest first. `null` if user does not exist. */
@@ -136,6 +181,8 @@ async function getSummary(userId) {
 }
 
 module.exports = {
+  getProfile,
+  updateInterests,
   getHistory,
   getMissions,
   getBadges,

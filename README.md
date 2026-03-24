@@ -171,6 +171,16 @@ Main file: `backend/src/services/userService.js`
     - `level = floor(sqrt(points / 100)) + 1`
     - `pointsToNextLevel = 100 * (baseLevel + 1)^2 - points`
   - triggers age badge awarding based on current `age`
+- `GET /api/user/:id/profile`:
+  - compact profile payload for demo personalization controls:
+    - `id`, `age`, `points`
+    - `interests` (normalized string array)
+    - `engagementScore`
+- `PUT /api/user/:id/interests`:
+  - request body: `{ "interests": ["games", "reading", ...] }`
+  - accepts and persists only allowed values:
+    - `games`, `reading`, `science`, `sports`, `art`, `music`, `technology`, `logic`, `creativity`
+  - normalizes to lowercase and removes duplicates
 
 ### 5.6 Badge Service
 
@@ -438,6 +448,17 @@ Reward display in Flutter:
   - points preview shown in the widget (`mission.points`)
   - in-widget timer from mission start to submission
   - restart button resets only the game UI/state without requiring a new analyze request
+
+### 8.1.2 Demo profile tab (interests editor)
+
+- file: `demo/index.html` (`Profile` tab)
+- supports:
+  - loading a user profile by id (`GET /api/user/:id/profile`)
+  - showing current `engagementScore`, age, and points
+  - selecting interests from predefined checkboxes
+  - saving interests via `PUT /api/user/:id/interests`
+- purpose:
+  - exposes personalization inputs in the demo without altering mission-generation logic
 
 ### 8.2 AI API (`http://127.0.0.1:8000`)
 

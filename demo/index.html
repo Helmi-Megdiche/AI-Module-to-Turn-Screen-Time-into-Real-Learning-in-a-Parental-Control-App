@@ -286,6 +286,24 @@
     table.missions-table tr:last-child td { border-bottom: none; }
     .status-completed { color: var(--accent); font-weight: 600; text-transform: capitalize; }
     .status-pending { color: var(--warn); font-weight: 600; text-transform: capitalize; }
+    .profile-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 0.45rem 0.9rem;
+      margin-top: 0.7rem;
+    }
+    .profile-grid label {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .profile-meta {
+      margin: 0.2rem 0;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
     .level-wrap { margin-top: 0.85rem; }
     .level-progress {
       width: 100%;
@@ -454,6 +472,7 @@
       <button class="tab-button" type="button" data-tab="badges">Badges</button>
       <button class="tab-button" type="button" data-tab="history">History</button>
       <button class="tab-button" type="button" data-tab="parent-missions">Parent: Missions</button>
+      <button class="tab-button" type="button" data-tab="profile">Profile</button>
     </div>
 
     <section>
@@ -629,6 +648,27 @@
         <div id="missionsList" style="margin-top:1rem"></div>
       </section>
     </div>
+
+    <div id="profile" class="tab-content">
+      <section>
+        <h2>6 · Profile</h2>
+        <p class="muted" style="margin-top:0">Set interests to drive personalized mission type selection.</p>
+        <div class="row">
+          <div>
+            <label for="profileUserId">User ID</label>
+            <input id="profileUserId" type="number" min="1" value="1" />
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" class="secondary" id="btnLoadProfile">
+            <span class="btn-label">Load profile</span>
+            <span class="btn-spinner" hidden aria-hidden="true"></span>
+          </button>
+        </div>
+        <div id="profileErr" class="err" hidden></div>
+        <div id="profileData" style="margin-top:1rem"></div>
+      </section>
+    </div>
   </div>
 
   <script>
@@ -657,6 +697,9 @@
     function bonusVal() {
       const n = parseInt($("missionBonus").value, 10);
       return Number.isFinite(n) && n >= 0 ? n : 0;
+    }
+    function profileUid() {
+      return parseInt($("profileUserId").value, 10);
     }
 
     // === Shared UI state ===
@@ -716,7 +759,15 @@
       el.textContent = msg;
     }
 
-    const ACTION_IDS = ["btnAnalyze", "btnClearImage", "btnSummary", "btnBadges", "btnHistory", "btnLoadMissions"];
+    const ACTION_IDS = [
+      "btnAnalyze",
+      "btnClearImage",
+      "btnSummary",
+      "btnBadges",
+      "btnHistory",
+      "btnLoadMissions",
+      "btnLoadProfile",
+    ];
 
     /** Toggle spinner + label on primary/secondary action buttons during fetch. */
     function setButtonLoading(btnId, loading, activeLabel, idleLabel) {
@@ -1644,6 +1695,123 @@
         await loadMissions();
       } catch (err) {
         alert(err.message || String(err));
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // === Profile interest management ===
+
+    const PROFILE_INTERESTS = [
+      "games",
+      "reading",
+      "science",
+      "sports",
+      "art",
+      "music",
+      "technology",
+      "logic",
+      "creativity",
+    ];
+
+    function renderProfileForm(user) {
+      const list = Array.isArray(user?.interests) ? user.interests : [];
+      const normalized = Array.from(
+        new Set(list.filter((x) => typeof x === "string").map((x) => x.trim().toLowerCase()))
+      );
+
+      const checkboxes = PROFILE_INTERESTS.map((interest) => {
+        const checked = normalized.includes(interest) ? "checked" : "";
+        return (
+          '<label><input type="checkbox" class="profile-interest" value="' +
+          interest +
+          '" ' +
+          checked +
+          " />" +
+          interest +
+          "</label>"
+        );
+      }).join("");
+
+      const score = Number(user?.engagementScore ?? 0.5);
+      $("profileData").innerHTML =
+        '<p class="profile-meta"><strong>Engagement score:</strong> ' +
+        (Number.isFinite(score) ? score.toFixed(2) : "0.50") +
+        "</p>" +
+        '<p class="profile-meta"><strong>Age:</strong> ' +
+        Number(user?.age ?? 0) +
+        ' · <strong>Points:</strong> ' +
+        Number(user?.points ?? 0) +
+        "</p>" +
+        '<div><strong>Interests</strong></div>' +
+        '<div class="profile-grid">' +
+        checkboxes +
+        "</div>" +
+        '<div class="actions" style="margin-top:0.9rem"><button type="button" id="btnSaveInterests">Save interests</button></div>';
+    }
+
+    async function loadProfile() {
+      showErr($("profileErr"), "");
+      $("profileData").innerHTML = "";
+      setButtonLoading("btnLoadProfile", true, "Loading…", "Load profile");
+      $("btnLoadProfile").disabled = true;
+      try {
+        const id = profileUid();
+        if (!Number.isFinite(id) || id <= 0) {
+          showErr($("profileErr"), "Please enter a valid User ID.");
+          return;
+        }
+
+        const res = await fetch(apiBase() + "/api/user/" + id + "/profile");
+        const data = await readJsonSafe(res);
+        if (!res.ok) {
+          showErr($("profileErr"), data.message || res.statusText);
+          return;
+        }
+
+        renderProfileForm(data.user || {});
+      } catch (err) {
+        showErr($("profileErr"), err.message || String(err));
+      } finally {
+        setButtonLoading("btnLoadProfile", false, "Loading…", "Load profile");
+        $("btnLoadProfile").disabled = false;
+      }
+    }
+
+    $("btnLoadProfile").addEventListener("click", loadProfile);
+
+    $("profileData").addEventListener("click", async (e) => {
+      const btn = e.target.closest("#btnSaveInterests");
+      if (!btn) return;
+
+      const id = profileUid();
+      if (!Number.isFinite(id) || id <= 0) {
+        showErr($("profileErr"), "Please enter a valid User ID.");
+        return;
+      }
+
+      const selected = Array.from(
+        document.querySelectorAll('#profileData input.profile-interest[type="checkbox"]:checked')
+      ).map((el) => el.value);
+
+      btn.disabled = true;
+      try {
+        const res = await fetch(apiBase() + "/api/user/" + id + "/interests", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ interests: selected }),
+        });
+        const data = await readJsonSafe(res);
+        if (!res.ok) {
+          showErr($("profileErr"), data.message || res.statusText);
+          return;
+        }
+
+        showErr($("profileErr"), "");
+        alert("Interests updated.");
+        await loadProfile();
+      } catch (err) {
+        showErr($("profileErr"), err.message || String(err));
       } finally {
         btn.disabled = false;
       }
