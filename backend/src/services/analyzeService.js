@@ -8,9 +8,16 @@ const prisma = require('../config/prisma');
 const aiService = require('./aiService');
 const { awardPointBadges } = require('./badgeService');
 const {
+  selectMissionType,
+  computeDifficulty,
+} = require('./personalizationService');
+const { generateMissionPayload } = require('./missionGenerators');
+const {
   SAFE_POINTS_COOLDOWN_MINUTES,
   SAFE_POINTS_DAILY_CAP,
 } = require('../config');
+
+// === Analysis payload guards and normalization ===
 
 const EMPTY_ANALYSIS = {
   text: '',
@@ -79,9 +86,14 @@ async function resolveAnalysisPayload(image) {
   return { ...normalizeAiResponse(raw), usedAI: true };
 }
 
+// === Mission generation ===
+
 /**
  * Maps continuous risk in [0,1] to a human-readable mission + points (product rule — not the same as ML “category”).
  * Bands: &lt;0.3 low, 0.3–0.7 medium, &gt;0.7 high consequence.
+ *
+ * @param {number} riskScore Risk value in [0, 1].
+ * @returns {{ mission: string, points: number }} Legacy mission text and base points.
  */
 function missionForRiskScore(riskScore) {
   if (riskScore < 0.3) {
@@ -93,84 +105,56 @@ function missionForRiskScore(riskScore) {
   return { mission: 'Go outside for 20 minutes', points: 10 };
 }
 
-function hasAnyLabel(labels, expected) {
-  if (!Array.isArray(labels) || labels.length === 0) {
-    return false;
-  }
-  const normalized = new Set(
-    labels.filter((x) => typeof x === 'string').map((x) => x.toLowerCase())
-  );
-  return expected.some((label) => normalized.has(label));
-}
-
-function generateInteractiveMission(riskScore, category, age, matchedKeywords = []) {
-  if (riskScore > 0.7) {
-    if (hasAnyLabel(matchedKeywords, ['hate speech', 'harassment'])) {
-      return {
-        mission: 'Complete the respectful communication quiz.',
-        points: 20,
-        type: 'quiz',
-        difficulty: 3,
-        content: {
-          question: 'Which of these is a respectful way to express disagreement?',
-          choices: [
-            "You're stupid",
-            'I disagree with your opinion',
-            'Nobody likes what you say',
-          ],
-          correctAnswer: 1,
-        },
-      };
-    }
-    return {
-      mission: 'Complete the focus mini-game challenge.',
-      points: 18,
-      type: 'mini_game',
-      difficulty: 3,
-      content: {
-        game: 'reaction_tap',
-        targetHits: 12,
-        maxSeconds: 45,
-      },
-    };
-  }
-
-  if (riskScore > 0.3) {
-    return {
-      mission: 'Complete the puzzle mission.',
-      points: 15,
-      type: 'puzzle',
-      difficulty: 2,
-      content: {
-        game: 'sudoku4x4',
-        grid: [
-          [0, 0, 1, 2],
-          [0, 0, 0, 0],
-          [0, 0, 0, 0],
-          [0, 0, 0, 0],
-        ],
-      },
-    };
-  }
-
-  return {
-    mission:
-      age < 10
-        ? 'Do 10 jumping jacks and share one thing you learned today.'
-        : 'Take a 5-minute offline break and write one useful takeaway from your activity.',
-    points: 2,
-    type: 'real_world',
-    difficulty: 1,
-    content: {
-      description:
-        'Do 10 jumping jacks and think about what you learned today.',
-    },
+/**
+ * Builds a mission payload (legacy + interactive metadata) from the current analysis.
+ *
+ * @param {number} riskScore Continuous risk score from AI/fallback moderation.
+ * @param {string} category Risk category label (`safe`, `risky`, `dangerous`).
+ * @param {number} age Child age, used as default when no user profile exists.
+ * @param {string[]} [matchedKeywords=[]] Moderation labels used for specialized mission selection.
+ * @param {{ age?: number, interests?: unknown, engagementScore?: number }} [userProfile={}] Optional user profile for personalization.
+ * @returns {{
+ *   mission: string,
+ *   points: number,
+ *   type: string,
+ *   game: string|null,
+ *   difficulty: number,
+ *   reward: { basePoints: number, maxBonus: number },
+ *   content: Record<string, unknown>
+ * }} Mission payload to store and return to the frontend.
+ */
+function generateInteractiveMission(
+  riskScore,
+  category,
+  age,
+  matchedKeywords = [],
+  userProfile = {}
+) {
+  const profile = {
+    age: Number.isFinite(Number(userProfile?.age)) ? Number(userProfile.age) : age,
+    interests: userProfile?.interests ?? [],
+    engagementScore: Number.isFinite(Number(userProfile?.engagementScore))
+      ? Number(userProfile.engagementScore)
+      : 0.5,
   };
+  const missionType = selectMissionType(profile, riskScore, category);
+  const difficulty = computeDifficulty(profile);
+  return generateMissionPayload({
+    missionType,
+    riskScore,
+    age: profile.age,
+    matchedKeywords,
+    difficulty,
+  });
 }
+
+// === Safe mission anti-farming helpers ===
 
 function startOfDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
+
+// === Public service entrypoint ===
 
 /**
  * Response shape when **no** rows are written — `analysis.id` is null, mission `status` is `preview`.
@@ -195,6 +179,8 @@ async function buildPreviewAnalyzeResult({ userId, age, analysis, mission }) {
       mission: mission.mission,
       points: mission.points,
       type: mission.type ?? 'real_world',
+      game: mission.game ?? null,
+      reward: mission.reward ?? null,
       content: mission.content ?? null,
       difficulty: mission.difficulty ?? 1,
       status: 'preview',
@@ -210,26 +196,34 @@ async function buildPreviewAnalyzeResult({ userId, age, analysis, mission }) {
 
 /**
  * Single entry used by the controller: resolves analysis, chooses mission, persists when an image was sent.
+ *
+ * @param {{ userId: number, age: number, image?: string }} input Analyze payload from controller.
+ * @returns {Promise<{
+ *   analysis: object,
+ *   mission: object,
+ *   user: object
+ * }>} Created DB rows (or preview-shaped objects when no image is sent).
  */
 async function runAnalyze({ userId, age, image }) {
   const analysis = await resolveAnalysisPayload(image);
   const { text, riskScore, category, usedAI, displayText, matchedKeywords } =
     analysis;
-  const generatedMission = generateInteractiveMission(
-    riskScore,
-    category,
-    age,
-    matchedKeywords
-  );
-  const { mission, points, type, content, difficulty } = generatedMission;
-  const awardImmediately = type === 'real_world' && riskScore < 0.3;
 
   if (!hasProvidedImage(image)) {
+    const existingUser = await prisma.user.findUnique({ where: { id: userId } });
+    const generatedMission = generateInteractiveMission(
+      riskScore,
+      category,
+      age,
+      matchedKeywords,
+      existingUser ?? { age, interests: [], engagementScore: 0.5 }
+    );
+    const { mission, points, type, game, reward, content, difficulty } = generatedMission;
     return buildPreviewAnalyzeResult({
       userId,
       age,
       analysis,
-      mission: { mission, points, type, content, difficulty },
+      mission: { mission, points, type, game, reward, content, difficulty },
     });
   }
 
@@ -242,9 +236,21 @@ async function runAnalyze({ userId, age, image }) {
           id: userId,
           age,
           points: 0,
+          interests: [],
+          engagementScore: 0.5,
         },
       });
     }
+
+    const generatedMission = generateInteractiveMission(
+      riskScore,
+      category,
+      age,
+      matchedKeywords,
+      user
+    );
+    const { mission, points, type, content, difficulty } = generatedMission;
+    const awardImmediately = type === 'real_world' && riskScore < 0.3;
 
     const analysis = await tx.analysis.create({
       data: {
@@ -273,10 +279,12 @@ async function runAnalyze({ userId, age, image }) {
     if (awardImmediately) {
       const now = new Date();
       const today = startOfDay(now);
+      // Reset daily safe counters once per new day before evaluating cooldown/cap.
       const currentSafePointsToday = Number(user.safePointsToday ?? 0);
       const needsDailyReset =
         !user.lastSafeResetDate || user.lastSafeResetDate < today;
       const safePointsToday = needsDailyReset ? 0 : currentSafePointsToday;
+      // Safe points are awarded only when both the cooldown and daily cap allow it.
       const cooldownMs = SAFE_POINTS_COOLDOWN_MINUTES * 60 * 1000;
       const cooldownPassed =
         !user.lastSafeMissionAt || now - user.lastSafeMissionAt >= cooldownMs;

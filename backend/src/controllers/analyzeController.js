@@ -60,6 +60,16 @@ async function postAnalyze(req, res) {
       mission: {
         id: mission.id ?? null,
         type: mission.type ?? 'real_world',
+        game:
+          mission.game ??
+          (mission.content && typeof mission.content === 'object'
+            ? mission.content.game ?? null
+            : null),
+        reward:
+          mission.reward ??
+          (mission.content && typeof mission.content === 'object'
+            ? mission.content.reward ?? null
+            : null),
         content: mission.content ?? null,
         difficulty: mission.difficulty ?? 1,
         text: mission.mission,

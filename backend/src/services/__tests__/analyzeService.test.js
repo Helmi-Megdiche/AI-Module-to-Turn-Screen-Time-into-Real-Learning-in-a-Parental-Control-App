@@ -59,7 +59,7 @@ describe('missionForRiskScore', () => {
 });
 
 describe('generateInteractiveMission', () => {
-  test('returns quiz mission for dangerous hate/harassment signals', () => {
+  test('returns quiz mission for dangerous risk', () => {
     const mission = generateInteractiveMission(0.9, 'dangerous', 12, [
       'hate speech',
     ]);
@@ -67,29 +67,36 @@ describe('generateInteractiveMission', () => {
       expect.objectContaining({
         type: 'quiz',
         points: 20,
-        difficulty: 3,
+        difficulty: 2,
       })
     );
+    expect(mission.reward).toEqual({ basePoints: 20, maxBonus: 5 });
   });
 
-  test('returns puzzle mission for mid risk', () => {
-    const mission = generateInteractiveMission(0.5, 'risky', 10, []);
+  test('returns mini_game for games interest at non-dangerous risk', () => {
+    const mission = generateInteractiveMission(
+      0.5,
+      'risky',
+      12,
+      [],
+      { age: 12, interests: ['games'], engagementScore: 0.7 }
+    );
     expect(mission).toEqual(
       expect.objectContaining({
-        type: 'puzzle',
-        points: 15,
+        type: 'mini_game',
+        points: 18,
         difficulty: 2,
       })
     );
   });
 
   test('returns real_world mission for safe risk', () => {
-    const mission = generateInteractiveMission(0.1, 'safe', 9, []);
+    const mission = generateInteractiveMission(0.1, 'safe', 12, []);
     expect(mission).toEqual(
       expect.objectContaining({
         type: 'real_world',
         points: 2,
-        difficulty: 1,
+        difficulty: 2,
       })
     );
   });
@@ -172,7 +179,7 @@ describe('runAnalyze safe-point controls', () => {
     expect(tx.mission.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         type: 'real_world',
-        difficulty: 1,
+        difficulty: 2,
       }),
     });
     expect(tx.user.update).toHaveBeenCalledWith({
@@ -364,8 +371,8 @@ describe('runAnalyze safe-point controls', () => {
     expect(tx.mission.create).toHaveBeenCalledTimes(1);
     expect(tx.mission.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        type: 'mini_game',
-        difficulty: 3,
+        type: 'quiz',
+        difficulty: 2,
       }),
     });
     expect(tx.user.update).not.toHaveBeenCalled();

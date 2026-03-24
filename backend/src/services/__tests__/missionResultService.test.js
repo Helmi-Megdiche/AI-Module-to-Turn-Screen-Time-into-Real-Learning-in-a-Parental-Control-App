@@ -9,7 +9,11 @@ jest.mock('../badgeService', () => ({
 
 const prisma = require('../../config/prisma');
 const { awardPointBadges, awardMissionBadges } = require('../badgeService');
-const { calculateBonus, submitResult } = require('../missionResultService');
+const {
+  calculateBonus,
+  submitResult,
+  computeEngagementScore,
+} = require('../missionResultService');
 
 describe('missionResultService.calculateBonus', () => {
   test('quiz success with score=1 gives bonus 5', () => {
@@ -23,6 +27,14 @@ describe('missionResultService.calculateBonus', () => {
       { success: true, timeSpent: 20 }
     );
     expect(bonus).toBe(5);
+  });
+
+  test('puzzle bonus is capped by reward.maxBonus when provided', () => {
+    const bonus = calculateBonus(
+      { type: 'puzzle', content: { reward: { maxBonus: 4 } } },
+      { success: true, timeSpent: 10 }
+    );
+    expect(bonus).toBe(4);
   });
 
   test('mini_game win gives bonus 10', () => {
@@ -39,6 +51,22 @@ describe('missionResultService.calculateBonus', () => {
       { score: 2, success: false }
     );
     expect(bonus).toBe(0);
+  });
+});
+
+describe('missionResultService.computeEngagementScore', () => {
+  test('returns 0.5 when there are no results', () => {
+    expect(computeEngagementScore([])).toBe(0.5);
+  });
+
+  test('increases for successful recent streak', () => {
+    const score = computeEngagementScore([
+      { success: true },
+      { success: true },
+      { success: false },
+      { success: true },
+    ]);
+    expect(score).toBeGreaterThan(0.5);
   });
 });
 
@@ -67,6 +95,11 @@ describe('missionResultService.submitResult', () => {
       missionResult: {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 100, bonusPoints: 5 }),
+        findMany: jest.fn().mockResolvedValue([
+          { success: true },
+          { success: true },
+          { success: false },
+        ]),
       },
       user: {
         update: jest.fn().mockResolvedValue({
@@ -100,6 +133,7 @@ describe('missionResultService.submitResult', () => {
       data: {
         points: { increment: 25 },
         completedMissions: { increment: 1 },
+        engagementScore: expect.any(Number),
       },
     });
     expect(awardPointBadges).toHaveBeenCalledWith(1, 50, 75, tx);

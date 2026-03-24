@@ -12,6 +12,8 @@ model User {
   age               Int
   points            Int        @default(0)
   completedMissions Int        @default(0)
+  interests         Json?      @default("[]")
+  engagementScore   Float      @default(0.5)
   lastSafeMissionAt DateTime?
   safePointsToday   Int        @default(0)
   lastSafeResetDate DateTime?
