@@ -1,7 +1,8 @@
 """
 Vision moderation service using a local NSFW+violence image classifier.
 
-The module loads ``ml6team/violence-and-nsfw`` once, reuses it for later calls,
+The module loads a configurable model (default ``Ateeqq/nsfw-image-detection``),
+reuses it for later calls,
 and exposes ``classify_image`` to return API-compatible risk metadata with the
 same public contract as before.
 """
@@ -18,6 +19,21 @@ logger = logging.getLogger(__name__)
 
 _classifier = None
 
+NSFW_LABEL_ALIASES = {
+    "nsfw",
+    "nudity",
+    "pornography",
+    "nudity_pornography",
+}
+
+VIOLENCE_LABEL_ALIASES = {
+    "violence",
+    "violent",
+    "gore",
+    "bloodshed",
+    "gore_bloodshed_violent",
+}
+
 
 def get_classifier():
     """
@@ -29,31 +45,51 @@ def get_classifier():
     global _classifier
     if _classifier is None:
         device = 0 if torch.cuda.is_available() else -1
-        logger.info(
-            "Loading visual safety classifier... model=%s device=%s",
+        device_label = "cuda:0" if device == 0 else "cpu"
+        model_candidates = [
             VISION_MODEL_NAME,
-            "cuda:0" if device == 0 else "cpu",
-        )
-        _classifier = pipeline(
-            "image-classification",
-            model=VISION_MODEL_NAME,
-            device=device,
-        )
+            "Ateeqq/nsfw-image-detection",
+            "Falconsai/nsfw_image_detection",
+        ]
+        last_error = None
+
+        for model_name in model_candidates:
+            try:
+                logger.info(
+                    "Loading visual safety classifier... model=%s device=%s",
+                    model_name,
+                    device_label,
+                )
+                _classifier = pipeline(
+                    "image-classification",
+                    model=model_name,
+                    device=device,
+                )
+                logger.info("Visual safety classifier ready: %s", model_name)
+                break
+            except Exception as exc:
+                last_error = exc
+                logger.warning("Could not load vision model %s: %s", model_name, exc)
+
+        if _classifier is None:
+            raise RuntimeError(
+                f"Unable to load any vision model candidate: {last_error}"
+            )
     return _classifier
 
 
-def _score_for_label(result: list[dict], label: str) -> float:
-    label_lower = label.lower()
-    return float(
-        next(
-            (
-                row.get("score", 0.0)
-                for row in result
-                if str(row.get("label", "")).strip().lower() == label_lower
-            ),
-            0.0,
-        )
-    )
+def _normalized_label(label: str) -> str:
+    return str(label).strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _max_score_for_aliases(result: list[dict], aliases: set[str]) -> float:
+    max_score = 0.0
+    for row in result:
+        label = _normalized_label(row.get("label", ""))
+        score = float(row.get("score", 0.0))
+        if label in aliases and score > max_score:
+            max_score = score
+    return max_score
 
 
 def classify_image(image: Image.Image):
@@ -73,8 +109,8 @@ def classify_image(image: Image.Image):
         pipe = get_classifier()
         result = pipe(image)
 
-        nsfw_score = _score_for_label(result, "nsfw")
-        violence_score = _score_for_label(result, "violence")
+        nsfw_score = _max_score_for_aliases(result, NSFW_LABEL_ALIASES)
+        violence_score = _max_score_for_aliases(result, VIOLENCE_LABEL_ALIASES)
         risk_score = max(nsfw_score, violence_score)
 
         matched = []

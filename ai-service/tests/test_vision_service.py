@@ -59,6 +59,24 @@ def test_classify_violence_image_adds_violence_keyword() -> None:
     assert "nsfw visual" not in result["matchedKeywords"]
 
 
+def test_classify_gore_alias_maps_to_violence() -> None:
+    img = Image.new("RGB", (224, 224), color="white")
+
+    def fake_pipe(_image):
+        return [
+            {"label": "gore_bloodshed_violent", "score": 0.79},
+            {"label": "nudity_pornography", "score": 0.22},
+            {"label": "safe_normal", "score": 0.01},
+        ]
+
+    vision_service._classifier = fake_pipe
+    result = vision_service.classify_image(img)
+
+    assert result["riskScore"] == 0.79
+    assert "violence visual" in result["matchedKeywords"]
+    assert "nsfw visual" not in result["matchedKeywords"]
+
+
 def test_classify_mixed_harmful_uses_max_and_both_keywords() -> None:
     img = Image.new("RGB", (224, 224), color="white")
 

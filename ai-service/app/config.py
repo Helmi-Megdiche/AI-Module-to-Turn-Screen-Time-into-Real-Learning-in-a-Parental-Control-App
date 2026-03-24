@@ -61,6 +61,6 @@ STARTUP_MODEL_LOAD_TIMEOUT_SECONDS = _int_env("MODERATION_STARTUP_MODEL_LOAD_TIM
 
 VISION_MODEL_NAME = os.getenv(
     "VISION_MODEL_NAME",
-    "ml6team/violence-and-nsfw",
+    "Ateeqq/nsfw-image-detection",
 )
 VISION_MATCHED_KEYWORDS_THRESHOLD = _float_env("VISION_MATCHED_KEYWORDS_THRESHOLD", 0.5)

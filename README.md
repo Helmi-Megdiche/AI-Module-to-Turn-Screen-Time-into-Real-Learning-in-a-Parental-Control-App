@@ -284,12 +284,16 @@ Main file: `ai-service/app/services/risk_scoring.py`
 
 Main file: `ai-service/app/services/vision_service.py`
 
-- model: `ml6team/violence-and-nsfw`
+- default model: `Ateeqq/nsfw-image-detection`
 - lazy-loaded classifier, GPU if available
 - model classes used by service:
-  - `nsfw`
-  - `violence`
-  - `safe`
+  - `nudity_pornography` (mapped to NSFW)
+  - `gore_bloodshed_violent` (mapped to violence)
+  - `safe_normal`
+- model fallback candidates at load time:
+  - configured `VISION_MODEL_NAME`
+  - `Ateeqq/nsfw-image-detection`
+  - `Falconsai/nsfw_image_detection` (NSFW-only fallback)
 - returns:
   - `riskScore = max(nsfw_score, violence_score)`
   - `matchedKeywords`:
@@ -469,7 +473,7 @@ From `ai-service/app/config.py`:
 - `MODERATION_SHORT_TEXT_FALLBACK_THRESHOLD`
 - `MODERATION_CACHE_SIZE`
 - `MODERATION_STARTUP_MODEL_LOAD_TIMEOUT_SECONDS`
-- `VISION_MODEL_NAME` (default `ml6team/violence-and-nsfw`)
+- `VISION_MODEL_NAME` (default `Ateeqq/nsfw-image-detection`)
 - `VISION_MATCHED_KEYWORDS_THRESHOLD` (default `0.5`)
 
 ### 9.3 Test Runner Environment
