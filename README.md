@@ -32,6 +32,7 @@ flowchart LR
 - `backend/`: Express API, business logic, Prisma schema/migrations/seed, Jest tests
 - `ai-service/`: FastAPI OCR + moderation + vision service, evaluation script, pytest tests
 - `demo/`: single-page HTML interface to exercise the full flow
+- `android-app/`: Flutter Android client that detects target apps (usage stats), captures the screen (MediaProjection), compresses, and uploads `POST /api/analyze` in the background — see [`android-app/README.md`](android-app/README.md)
 - `scripts/`: cross-stack test runner (`run-all-tests.js`, `run_tests.sh`)
 - `.husky/`: pre-commit test hook
 

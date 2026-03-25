@@ -1,0 +1,522 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:ui';
+
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:media_projection_creator/media_projection_creator.dart';
+import 'package:media_projection_screenshot/captured_image.dart';
+import 'package:media_projection_screenshot/media_projection_screenshot.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:usage_stats/usage_stats.dart';
+import 'package:workmanager/workmanager.dart';
+
+/// Android [UsageEvents.Event.MOVE_TO_FOREGROUND](https://developer.android.com/reference/android/app/usage/UsageEvents.Event#MOVE_TO_FOREGROUND).
+const String _kMoveToForeground = '1';
+
+const List<String> kTargetApps = [
+  'com.google.android.youtube',
+  'com.instagram.android',
+  'com.facebook.katana',
+];
+
+const String kLogFileName = 'event_log.txt';
+const String kUploadTaskName = 'uploadAnalyzeTask';
+
+Future<File> _logFile() async {
+  final dir = await getApplicationDocumentsDirectory();
+  return File('${dir.path}/$kLogFileName');
+}
+
+Future<void> appendEventLog(String message) async {
+  final f = await _logFile();
+  final ts = DateTime.now().toIso8601String();
+  await f.writeAsString('$ts $message\n', mode: FileMode.append, flush: true);
+}
+
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    WidgetsFlutterBinding.ensureInitialized();
+    DartPluginRegistrant.ensureInitialized();
+
+    if (task != kUploadTaskName || inputData == null) {
+      return Future.value(true);
+    }
+
+    final filePath = inputData['filePath'] as String?;
+    final baseUrl = (inputData['baseUrl'] as String?)?.replaceAll(RegExp(r'/+$'), '');
+    final userId = inputData['userId'];
+    final age = inputData['age'];
+
+    if (filePath == null || baseUrl == null || userId == null || age == null) {
+      await appendEventLog('Upload error: missing inputData');
+      return Future.value(true);
+    }
+
+    final file = File(filePath);
+    if (!await file.exists()) {
+      await appendEventLog('Upload error: file missing ($filePath)');
+      return Future.value(true);
+    }
+
+    try {
+      final bytes = await file.readAsBytes();
+      final imageB64 = base64Encode(bytes);
+      final dio = Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 120),
+          sendTimeout: const Duration(seconds: 120),
+          contentType: Headers.jsonContentType,
+        ),
+      );
+
+      final response = await dio.post<Map<String, dynamic>>(
+        '$baseUrl/api/analyze',
+        data: <String, dynamic>{
+          'userId': userId is int ? userId : int.parse(userId.toString()),
+          'age': age is int ? age : int.parse(age.toString()),
+          'image': imageB64,
+        },
+      );
+
+      final data = response.data;
+      if (data != null && data['success'] == true) {
+        final mission = data['mission'];
+        String missionText = '';
+        if (mission is Map) {
+          missionText = (mission['text'] ?? mission['mission'] ?? '').toString();
+        }
+        final analysis = data['analysis'];
+        String riskBit = '';
+        if (analysis is Map && analysis['risk'] != null) {
+          riskBit = ' risk: ${analysis['risk']}';
+        } else if (analysis != null) {
+          riskBit = ' analysis: ${analysis.toString()}';
+          if (riskBit.length > 120) {
+            riskBit = '${riskBit.substring(0, 120)}...';
+          }
+        }
+        await appendEventLog('Uploaded: mission: $missionText$riskBit');
+        await file.delete();
+      } else {
+        await appendEventLog('Upload error: bad response $data');
+      }
+    } on DioException catch (e) {
+      final msg = e.response?.data?.toString() ?? e.message;
+      await appendEventLog('Upload error: $msg');
+      return Future.value(false);
+    } catch (e, st) {
+      await appendEventLog('Upload error: $e\n$st');
+      return Future.value(false);
+    }
+
+    return Future.value(true);
+  });
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Workmanager().initialize(
+    callbackDispatcher,
+    isInDebugMode: kDebugMode,
+  );
+  runApp(const ParentalMonitorApp());
+}
+
+class ParentalMonitorApp extends StatelessWidget {
+  const ParentalMonitorApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Screen monitor (demo)',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+        useMaterial3: true,
+      ),
+      home: const MonitorHomePage(),
+    );
+  }
+}
+
+class MonitorHomePage extends StatefulWidget {
+  const MonitorHomePage({super.key});
+
+  @override
+  State<MonitorHomePage> createState() => _MonitorHomePageState();
+}
+
+class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingObserver {
+  final TextEditingController _userIdController = TextEditingController(text: '1');
+  final TextEditingController _ageController = TextEditingController(text: '10');
+  final TextEditingController _baseUrlController = TextEditingController(text: 'http://10.0.2.2:3000');
+  final MediaProjectionScreenshot _screenshot = MediaProjectionScreenshot();
+
+  Timer? _pollTimer;
+  String? _lastForegroundPackage;
+  bool _monitoring = false;
+  String _logText = '';
+  String _status = 'Grant permissions, then start monitoring.';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refreshLogFromDisk();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pollTimer?.cancel();
+    _userIdController.dispose();
+    _ageController.dispose();
+    _baseUrlController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshPermissionMessage();
+    }
+  }
+
+  Future<void> _refreshLogFromDisk() async {
+    try {
+      final f = await _logFile();
+      if (await f.exists()) {
+        final t = await f.readAsString();
+        if (mounted) {
+          setState(() => _logText = t.isEmpty ? '(empty log)' : t);
+        }
+      } else if (mounted) {
+        setState(() => _logText = '(no log file yet)');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _logText = 'Could not read log: $e');
+      }
+    }
+  }
+
+  Future<void> _refreshPermissionMessage() async {
+    if (!Platform.isAndroid) {
+      setState(() => _status = 'This demo targets Android only.');
+      return;
+    }
+    final usage = await UsageStats.checkUsagePermission() == true;
+    final notif = await Permission.notification.isGranted;
+    var projection = false;
+    try {
+      projection = MediaProjectionScreenshot.isGranted;
+    } catch (_) {
+      projection = false;
+    }
+
+    final parts = <String>[
+      if (usage) 'Usage stats OK' else 'Usage stats needed (Settings)',
+      if (notif) 'Notifications OK' else 'Notifications: grant on Android 13+',
+      if (projection) 'Screen capture OK' else 'Screen capture not granted yet',
+    ];
+    if (mounted) {
+      setState(() => _status = parts.join(' · '));
+    }
+  }
+
+  Future<bool> _ensurePermissionsForStart() async {
+    if (!Platform.isAndroid) {
+      _snack('Android only.');
+      return false;
+    }
+
+    final usageOk = await UsageStats.checkUsagePermission() == true;
+    if (!usageOk) {
+      await UsageStats.grantUsagePermission();
+      await appendEventLog('Open Settings and allow usage access, then tap Start again.');
+      _snack('Allow usage access in Settings, return, then Start again.');
+      await _refreshPermissionMessage();
+      return false;
+    }
+
+    final notifStatus = await Permission.notification.request();
+    if (!notifStatus.isGranted && !notifStatus.isProvisional) {
+      _snack('Notification permission helps show capture status; you can continue if denied.');
+    }
+
+    final code = await _screenshot.requestPermission();
+    if (code != MediaProjectionCreator.ERROR_CODE_SUCCEED) {
+      final msg = code == MediaProjectionCreator.ERROR_CODE_FAILED_USER_CANCELED
+          ? 'Screen capture cancelled.'
+          : 'Screen capture failed (code $code).';
+      _snack(msg);
+      await appendEventLog(msg);
+      await _refreshPermissionMessage();
+      return false;
+    }
+
+    await _refreshPermissionMessage();
+    return true;
+  }
+
+  void _snack(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _startMonitoring() async {
+    final ok = await _ensurePermissionsForStart();
+    if (!ok) {
+      return;
+    }
+
+    setState(() => _monitoring = true);
+    await appendEventLog('Monitoring started.');
+    await _refreshLogFromDisk();
+
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _pollUsage());
+    await _pollUsage();
+  }
+
+  void _stopMonitoring() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    setState(() {
+      _monitoring = false;
+      _lastForegroundPackage = null;
+    });
+    unawaited(appendEventLog('Monitoring stopped.'));
+    unawaited(_refreshLogFromDisk());
+    unawaited(MediaProjectionCreator.destroyMediaProjection());
+  }
+
+  Future<void> _pollUsage() async {
+    if (!_monitoring || !mounted) {
+      return;
+    }
+
+    final allowed = await UsageStats.checkUsagePermission();
+    if (allowed != true) {
+      return;
+    }
+
+    final end = DateTime.now();
+    final start = end.subtract(const Duration(seconds: 10));
+
+    List<EventUsageInfo> events;
+    try {
+      events = await UsageStats.queryEvents(start, end);
+    } catch (e) {
+      await appendEventLog('queryEvents error: $e');
+      return;
+    }
+
+    EventUsageInfo? latest;
+    var latestTs = -1;
+    for (final e in events) {
+      if (e.eventType != _kMoveToForeground) {
+        continue;
+      }
+      final pkg = e.packageName;
+      if (pkg == null || pkg.isEmpty) {
+        continue;
+      }
+      final ts = int.tryParse(e.timeStamp ?? '') ?? 0;
+      if (ts >= latestTs) {
+        latestTs = ts;
+        latest = e;
+      }
+    }
+
+    if (latest == null) {
+      return;
+    }
+    final pkg = latest.packageName!;
+    if (pkg == _lastForegroundPackage) {
+      return;
+    }
+    _lastForegroundPackage = pkg;
+
+    if (!kTargetApps.contains(pkg)) {
+      return;
+    }
+
+    await appendEventLog('Target app foreground: $pkg');
+    await _refreshLogFromDisk();
+    await _captureCompressSchedule();
+  }
+
+  Future<void> _captureCompressSchedule() async {
+    if (!mounted) {
+      return;
+    }
+
+    CapturedImage? captured;
+    try {
+      captured = await _screenshot.takeCapture();
+    } catch (e) {
+      await appendEventLog('takeCapture error: $e');
+      await _refreshLogFromDisk();
+      return;
+    }
+
+    if (captured == null) {
+      await appendEventLog('takeCapture returned null (permission or capture failure).');
+      await _refreshLogFromDisk();
+      return;
+    }
+
+    await appendEventLog('Screenshot captured (${captured.bytes.length} bytes PNG).');
+    await _refreshLogFromDisk();
+
+    final tmp = await getTemporaryDirectory();
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    final rawPath = '${tmp.path}/cap_$stamp.png';
+    final rawFile = File(rawPath);
+    await rawFile.writeAsBytes(captured.bytes, flush: true);
+
+    final outPath = '${tmp.path}/cap_${stamp}_c.jpg';
+    final compressed = await FlutterImageCompress.compressAndGetFile(
+      rawFile.absolute.path,
+      outPath,
+      quality: 80,
+      minWidth: 720,
+    );
+
+    try {
+      await rawFile.delete();
+    } catch (_) {}
+
+    if (compressed == null) {
+      await appendEventLog('Compression failed.');
+      await _refreshLogFromDisk();
+      return;
+    }
+
+    final outLen = await compressed.length();
+    await appendEventLog('Compressed: ${compressed.path} ($outLen bytes).');
+    await _refreshLogFromDisk();
+
+    final userId = int.tryParse(_userIdController.text.trim()) ?? 0;
+    final age = int.tryParse(_ageController.text.trim()) ?? 0;
+    if (userId <= 0) {
+      await appendEventLog('Invalid userId; set a positive integer.');
+      await _refreshLogFromDisk();
+      return;
+    }
+    if (age < 0) {
+      await appendEventLog('Invalid age.');
+      await _refreshLogFromDisk();
+      return;
+    }
+
+    final base = _baseUrlController.text.trim();
+    final unique = 'upload_${DateTime.now().millisecondsSinceEpoch}';
+
+    await Workmanager().registerOneOffTask(
+      unique,
+      kUploadTaskName,
+      inputData: <String, dynamic>{
+        'filePath': compressed.path,
+        'userId': userId,
+        'age': age,
+        'baseUrl': base,
+      },
+    );
+
+    await appendEventLog('Upload scheduled: $unique');
+    await _refreshLogFromDisk();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Parental control demo'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _userIdController,
+              decoration: const InputDecoration(labelText: 'User ID (positive int)'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _ageController,
+              decoration: const InputDecoration(labelText: 'Age (non‑negative int)'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _baseUrlController,
+              decoration: const InputDecoration(
+                labelText: 'Backend base URL',
+                hintText: 'http://10.0.2.2:3000',
+              ),
+              keyboardType: TextInputType.url,
+            ),
+            const SizedBox(height: 8),
+            Text(_status, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _monitoring ? null : () => _startMonitoring(),
+                    child: const Text('Start monitoring'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _monitoring ? _stopMonitoring : null,
+                    child: const Text('Stop monitoring'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () async {
+                await _refreshPermissionMessage();
+                await _refreshLogFromDisk();
+              },
+              child: const Text('Refresh status & log'),
+            ),
+            const SizedBox(height: 16),
+            Text('Event log ($kLogFileName)', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.all(8),
+                child: SingleChildScrollView(
+                  child: SelectableText(_logText, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
