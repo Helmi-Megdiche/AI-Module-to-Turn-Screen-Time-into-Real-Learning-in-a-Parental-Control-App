@@ -219,19 +219,17 @@ packages:
   media_projection_creator:
     dependency: "direct main"
     description:
-      name: media_projection_creator
-      sha256: e071257e8f97092d352aa3c8adf94a80a7ab53b20ed996ee8cd39dcf586f064c
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.0"
+      path: "packages/media_projection_creator"
+      relative: true
+    source: path
+    version: "1.0.0+patched3"
   media_projection_screenshot:
     dependency: "direct main"
     description:
-      name: media_projection_screenshot
-      sha256: "492102e98c8392c260c363c4cb3aa26606ce19c4c3c564164ea0d70c97b499d8"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.6"
+      path: "packages/media_projection_screenshot"
+      relative: true
+    source: path
+    version: "0.0.6+patched1"
   meta:
     dependency: transitive
     description:

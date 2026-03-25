@@ -41,6 +41,12 @@ dependencies:
   workmanager: ^0.7.0
   path_provider: ^2.1.0
 
+dependency_overrides:
+  media_projection_creator:
+    path: packages/media_projection_creator
+  media_projection_screenshot:
+    path: packages/media_projection_screenshot
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

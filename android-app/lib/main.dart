@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:ui';
 
@@ -28,6 +29,26 @@ const List<String> kTargetApps = [
 const String kLogFileName = 'event_log.txt';
 const String kUploadTaskName = 'uploadAnalyzeTask';
 
+/// Terminal: `flutter run` → stdout / Run tab. APK only: `adb logcat -s flutter MediaProjectionPatch`.
+void _trace(String message, {Object? error, StackTrace? stackTrace}) {
+  final line = '[ParentalMonitor] $message';
+  debugPrint(line);
+  developer.log(
+    message,
+    name: 'ParentalMonitor',
+    error: error,
+    stackTrace: stackTrace,
+  );
+}
+
+Future<void> _traceToFile(String message, {Object? error, StackTrace? stackTrace}) async {
+  _trace(message, error: error, stackTrace: stackTrace);
+  try {
+    final err = error != null ? ' | err=$error' : '';
+    await appendEventLog('[DEBUG] $message$err');
+  } catch (_) {}
+}
+
 Future<File> _logFile() async {
   final dir = await getApplicationDocumentsDirectory();
   return File('${dir.path}/$kLogFileName');
@@ -45,7 +66,10 @@ void callbackDispatcher() {
     WidgetsFlutterBinding.ensureInitialized();
     DartPluginRegistrant.ensureInitialized();
 
+    await _traceToFile('Workmanager task=$task keys=${inputData?.keys.toList()}');
+
     if (task != kUploadTaskName || inputData == null) {
+      await _traceToFile('Workmanager skip: wrong task or null data');
       return Future.value(true);
     }
 
@@ -55,13 +79,15 @@ void callbackDispatcher() {
     final age = inputData['age'];
 
     if (filePath == null || baseUrl == null || userId == null || age == null) {
-      await appendEventLog('Upload error: missing inputData');
+      await _traceToFile('Upload error: missing inputData');
       return Future.value(true);
     }
 
+    await _traceToFile('Upload POST $baseUrl/api/analyze file=$filePath');
+
     final file = File(filePath);
     if (!await file.exists()) {
-      await appendEventLog('Upload error: file missing ($filePath)');
+      await _traceToFile('Upload error: file missing ($filePath)');
       return Future.value(true);
     }
 
@@ -87,6 +113,8 @@ void callbackDispatcher() {
       );
 
       final data = response.data;
+      await _traceToFile('Upload HTTP ${response.statusCode}');
+
       if (data != null && data['success'] == true) {
         final mission = data['mission'];
         String missionText = '';
@@ -110,10 +138,10 @@ void callbackDispatcher() {
       }
     } on DioException catch (e) {
       final msg = e.response?.data?.toString() ?? e.message;
-      await appendEventLog('Upload error: $msg');
+      await _traceToFile('DioException: $msg', error: e);
       return Future.value(false);
     } catch (e, st) {
-      await appendEventLog('Upload error: $e\n$st');
+      await _traceToFile('Upload exception: $e', error: e, stackTrace: st);
       return Future.value(false);
     }
 
@@ -123,10 +151,12 @@ void callbackDispatcher() {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _trace('main(): kDebugMode=$kDebugMode initializing Workmanager');
   await Workmanager().initialize(
     callbackDispatcher,
     isInDebugMode: kDebugMode,
   );
+  _trace('main(): runApp');
   runApp(const ParentalMonitorApp());
 }
 
@@ -184,6 +214,7 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    unawaited(_traceToFile('lifecycle=$state MediaProjection.isGranted=${MediaProjectionScreenshot.isGranted}'));
     if (state == AppLifecycleState.resumed) {
       _refreshPermissionMessage();
     }
@@ -220,6 +251,7 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     } catch (_) {
       projection = false;
     }
+    _trace('refreshPermission: usage=$usage notif=$notif projection=$projection');
 
     final parts = <String>[
       if (usage) 'Usage stats OK' else 'Usage stats needed (Settings)',
@@ -237,8 +269,11 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
       return false;
     }
 
+    await _traceToFile('_ensurePermissionsForStart: begin baseUrl=${_baseUrlController.text.trim()}');
+
     final usageOk = await UsageStats.checkUsagePermission() == true;
     if (!usageOk) {
+      await _traceToFile('usage not granted → opening Settings');
       await UsageStats.grantUsagePermission();
       await appendEventLog('Open Settings and allow usage access, then tap Start again.');
       _snack('Allow usage access in Settings, return, then Start again.');
@@ -247,11 +282,14 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     }
 
     final notifStatus = await Permission.notification.request();
+    await _traceToFile('notification request → $notifStatus');
     if (!notifStatus.isGranted && !notifStatus.isProvisional) {
       _snack('Notification permission helps show capture status; you can continue if denied.');
     }
 
+    await _traceToFile('calling MediaProjectionScreenshot.requestPermission() (watch logcat tag MediaProjectionPatch)');
     final code = await _screenshot.requestPermission();
+    await _traceToFile('requestPermission() returned code=$code (0=OK 1=cancel 2=api low)');
     if (code != MediaProjectionCreator.ERROR_CODE_SUCCEED) {
       final msg = code == MediaProjectionCreator.ERROR_CODE_FAILED_USER_CANCELED
           ? 'Screen capture cancelled.'
@@ -262,6 +300,7 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
       return false;
     }
 
+    await _traceToFile('projection OK isGranted=${MediaProjectionScreenshot.isGranted}');
     await _refreshPermissionMessage();
     return true;
   }
@@ -361,16 +400,19 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
       return;
     }
 
+    await _traceToFile('takeCapture() start isGranted=${MediaProjectionScreenshot.isGranted}');
     CapturedImage? captured;
     try {
       captured = await _screenshot.takeCapture();
     } catch (e) {
+      await _traceToFile('takeCapture threw: $e', error: e);
       await appendEventLog('takeCapture error: $e');
       await _refreshLogFromDisk();
       return;
     }
 
     if (captured == null) {
+      await _traceToFile('takeCapture returned null');
       await appendEventLog('takeCapture returned null (permission or capture failure).');
       await _refreshLogFromDisk();
       return;
@@ -440,81 +482,86 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
 
   @override
   Widget build(BuildContext context) {
+    final logHeight = (MediaQuery.sizeOf(context).height * 0.28).clamp(160.0, 360.0);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Parental control demo'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _userIdController,
-              decoration: const InputDecoration(labelText: 'User ID (positive int)'),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _ageController,
-              decoration: const InputDecoration(labelText: 'Age (non‑negative int)'),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _baseUrlController,
-              decoration: const InputDecoration(
-                labelText: 'Backend base URL',
-                hintText: 'http://10.0.2.2:3000',
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _userIdController,
+                decoration: const InputDecoration(labelText: 'User ID (positive int)'),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
-              keyboardType: TextInputType.url,
-            ),
-            const SizedBox(height: 8),
-            Text(_status, style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _monitoring ? null : () => _startMonitoring(),
-                    child: const Text('Start monitoring'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _ageController,
+                decoration: const InputDecoration(labelText: 'Age (non‑negative int)'),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _baseUrlController,
+                decoration: const InputDecoration(
+                  labelText: 'Backend base URL',
+                  hintText: 'http://10.0.2.2:3000',
+                ),
+                keyboardType: TextInputType.url,
+              ),
+              const SizedBox(height: 8),
+              Text(_status, style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _monitoring ? null : () => _startMonitoring(),
+                      child: const Text('Start monitoring'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _monitoring ? _stopMonitoring : null,
+                      child: const Text('Stop monitoring'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () async {
+                  await _refreshPermissionMessage();
+                  await _refreshLogFromDisk();
+                },
+                child: const Text('Refresh status & log'),
+              ),
+              const SizedBox(height: 16),
+              Text('Event log ($kLogFileName)', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: logHeight,
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.all(8),
+                  child: SingleChildScrollView(
+                    child: SelectableText(_logText, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _monitoring ? _stopMonitoring : null,
-                    child: const Text('Stop monitoring'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: () async {
-                await _refreshPermissionMessage();
-                await _refreshLogFromDisk();
-              },
-              child: const Text('Refresh status & log'),
-            ),
-            const SizedBox(height: 16),
-            Text('Event log ($kLogFileName)', style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 8),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: const EdgeInsets.all(8),
-                child: SingleChildScrollView(
-                  child: SelectableText(_logText, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
-                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
