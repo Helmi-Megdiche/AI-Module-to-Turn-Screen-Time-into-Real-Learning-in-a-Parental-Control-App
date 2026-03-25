@@ -1,6 +1,6 @@
 name: media_projection_screenshot
 description: Screenshot plugin for Android using MediaProjection API.
-version: 0.0.6+patched1
+version: 0.0.6+patched2
 homepage: https://github.com/liasica/media_projection_screenshot
 repository: https://github.com/liasica/media_projection_screenshot
 

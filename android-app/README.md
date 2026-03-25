@@ -11,7 +11,7 @@ Flutter **Android** app (Dart package name `android_capture`, folder `android-ap
 ## Dependency notes
 
 - **`media_projection_creator`**: vendored under [`packages/media_projection_creator`](packages/media_projection_creator) with an Android patch (`registerReceiver` + `RECEIVER_NOT_EXPORTED` on API 33+) so screen-capture permission works on **Android 14 / 15** (e.g. Honor). The app uses **`dependency_overrides`** in `pubspec.yaml` so `media_projection_screenshot` still resolves.
-- **`media_projection_screenshot`**: vendored under [`packages/media_projection_screenshot`](packages/media_projection_screenshot) as **`0.0.6+patched1`** — upstream **`0.0.6`** does not call **`MediaProjection.registerCallback`** before **`createVirtualDisplay`**, which **Android 14+** rejects (`IllegalStateException: Must register a callback before starting capture`). The patch registers a one-shot callback and fixes **single-capture** virtual display cleanup.
+- **`media_projection_screenshot`**: vendored under [`packages/media_projection_screenshot`](packages/media_projection_screenshot) as **`0.0.6+patched2`** — **`0.0.6`** is missing **`registerCallback`** before **`createVirtualDisplay`** (Android 14+). **`patched2`** also reuses **one** `VirtualDisplay` per consent session so repeated **`takeCapture`** does not hit **`SecurityException`** (multiple **`createVirtualDisplay`** on the same **`MediaProjection`**).
 - **`workmanager`**: `0.5.x` does not compile with the current Android toolchain (legacy embedding references). **`^0.7.0`** works with Flutter 3.24; **`0.9.x`** requires a newer Flutter SDK (3.32+).
 - **AGP 8 `namespace`**: older plugins omit it; `android/build.gradle.kts` sets `namespace` from each library’s manifest `package` when missing.
 

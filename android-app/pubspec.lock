@@ -229,7 +229,7 @@ packages:
       path: "packages/media_projection_screenshot"
       relative: true
     source: path
-    version: "0.0.6+patched1"
+    version: "0.0.6+patched2"
   meta:
     dependency: transitive
     description:

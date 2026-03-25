@@ -42,6 +42,12 @@ class MediaProjectionScreenshotPlugin : FlutterPlugin, MethodCallHandler, EventC
   private var mVirtualDisplay: VirtualDisplay? = null
   private var mImageReader: ImageReader? = null
 
+  /** One VirtualDisplay per MediaProjection session (API 34+ forbids multiple createVirtualDisplay on the same instance). */
+  private var takeShotVirtualDisplay: VirtualDisplay? = null
+  private var takeShotImageReader: ImageReader? = null
+  private var takeShotWidth: Int = 0
+  private var takeShotHeight: Int = 0
+
   private var isLiving: AtomicBoolean = AtomicBoolean(false)
   private var processingTime = AtomicLong(System.currentTimeMillis())
   private var counting = AtomicLong(0)
@@ -92,6 +98,7 @@ class MediaProjectionScreenshotPlugin : FlutterPlugin, MethodCallHandler, EventC
   }
 
   override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+    releaseTakeShotPipeline()
     methodChannel.setMethodCallHandler(null)
   }
 
@@ -107,6 +114,7 @@ class MediaProjectionScreenshotPlugin : FlutterPlugin, MethodCallHandler, EventC
       RequestMediaProjectionPermissionManager.ERROR_CODE_SUCCEED -> {
         Log.i(LOG_TAG, "Create media projection succeeded!")
         projectionCallbackRegistered.set(false)
+        releaseTakeShotPipeline()
         mediaProjection = projection
       }
 
@@ -128,10 +136,21 @@ class MediaProjectionScreenshotPlugin : FlutterPlugin, MethodCallHandler, EventC
         override fun onStop() {
           Log.i(LOG_TAG, "MediaProjection onStop")
           projectionCallbackRegistered.set(false)
+          releaseTakeShotPipeline()
         }
       },
       projectionMainHandler,
     )
+  }
+
+  private fun releaseTakeShotPipeline() {
+    takeShotVirtualDisplay?.release()
+    takeShotVirtualDisplay = null
+    takeShotImageReader?.surface?.release()
+    takeShotImageReader?.close()
+    takeShotImageReader = null
+    takeShotWidth = 0
+    takeShotHeight = 0
   }
 
   private fun stopCapture(result: Result) {
@@ -278,25 +297,38 @@ class MediaProjectionScreenshotPlugin : FlutterPlugin, MethodCallHandler, EventC
     val width = metrics.widthPixels
     val height = metrics.heightPixels
 
-    val imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 5)
-
     ensureMediaProjectionCallbackRegistered()
-    val singleVirtualDisplay = mediaProjection?.createVirtualDisplay(
-      CAPTURE_SINGLE,
-      width,
-      height,
-      1,
-      DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC,
-      imageReader.surface,
-      null,
-      null,
-    )
+
+    if (takeShotVirtualDisplay == null || takeShotWidth != width || takeShotHeight != height) {
+      releaseTakeShotPipeline()
+      takeShotImageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 5)
+      takeShotVirtualDisplay = mediaProjection?.createVirtualDisplay(
+        CAPTURE_SINGLE,
+        width,
+        height,
+        1,
+        DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC,
+        takeShotImageReader!!.surface,
+        null,
+        null,
+      )
+      if (takeShotVirtualDisplay == null) {
+        releaseTakeShotPipeline()
+        result.error(LOG_TAG, "createVirtualDisplay failed", null)
+        return
+      }
+      takeShotWidth = width
+      takeShotHeight = height
+    }
+
+    val imageReader = takeShotImageReader
+      ?: run {
+        result.error(LOG_TAG, "Could not allocate ImageReader for capture", null)
+        return
+      }
 
     Handler(Looper.getMainLooper()).postDelayed({
       val image = imageReader.acquireLatestImage() ?: run {
-        singleVirtualDisplay?.release()
-        imageReader.surface.release()
-        imageReader.close()
         result.error(LOG_TAG, "No image available from capture", null)
         return@postDelayed
       }
@@ -312,9 +344,6 @@ class MediaProjectionScreenshotPlugin : FlutterPlugin, MethodCallHandler, EventC
       bitmap.copyPixelsFromBuffer(buffer)
 
       image.close()
-      singleVirtualDisplay?.release()
-      imageReader.surface.release()
-      imageReader.close()
 
       val region = call.arguments as Map<*, *>?
       region?.let {
