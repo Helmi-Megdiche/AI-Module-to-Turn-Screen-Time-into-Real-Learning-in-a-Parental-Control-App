@@ -21,7 +21,7 @@ Sprint-style progress and **next AI priorities** are tracked in **[ROADMAP.md](R
 
 **AI module capabilities today:**
 
-- **Multilingual OCR:** English, French, Arabic (EasyOCR).
+- **OCR languages (EasyOCR):** **English + Arabic** in one reader (`fr` cannot be combined with `ar` in the same `lang_list` per EasyOCR). French on-screen text may still appear as Latin where the detector generalizes.
 - **Dialect-aware moderation (heuristic):** Arabizi-style normalization; digit-to-letter mapping (e.g. **3→ع**, **7→ح**); Tunisian risky-token dictionary; where Arabizi typing uses **9** for **ق** in fixed expressions (e.g. **قحبة**), **whole-token normalization** in `dialect_utils` applies; keyword flag **`tunisian_dialect_risk`**; **+0.1** text risk bump **bounded to 1.0**; then **fusion with vision** via `max`.
 - **Risk scoring:** text (moderation + optional dialect bump) + vision; **keyword explainability** in API payloads; downstream **missions / gamification** driven by backend rules from `riskScore` / `category`.
 
@@ -60,7 +60,7 @@ flowchart LR
 2. If no image is provided, backend returns a safe preview (`riskScore: 0`) and does not persist analysis.
 3. If image is present, backend calls AI service `/analyze`.
 4. AI service decodes base64 image and runs the **on-device AI pipeline** (see §6 and [ROADMAP.md](ROADMAP.md)):
-   - **OCR extraction** (EasyOCR **en / fr / ar**)
+   - **OCR extraction** (EasyOCR **en / ar**; `fr` omitted — not supported together with `ar` in EasyOCR)
    - **Text moderation** (zero-shot classifier, rule fallback on failure) — core logic unchanged by dialect layer
    - **Dialect normalization + Tunisian / Arabizi keyword detection** (`dialect_utils`) — heuristic, deterministic, low-latency; optional augment only
    - **Text risk adjustment** if dialect hits: **`tunisian_dialect_risk`** + canonical terms; **+0.1** to text risk **capped at 1.0**
@@ -233,7 +233,7 @@ Main file: `backend/src/services/badgeService.js`
 
 ## 6) AI Service (FastAPI / EasyOCR / Transformers)
 
-**Internal text pipeline (ordered):** screenshot / base64 image → **OCR** (`ocr_service.py`, en/fr/ar) → **text moderation** (`moderation_service.py`) → **dialect normalization + keyword detection** (`dialect_utils.py`) → bounded **+0.1** text-risk augment when matched → **vision** (`vision_service.py`) → **max** fusion and category (`analysis_orchestrator.py`). Dialect is **heuristic**, **deterministic**, and **fast**; it does not mutate frozen moderation outputs—only **post-process copies** in the orchestrator.
+**Internal text pipeline (ordered):** screenshot / base64 image → **OCR** (`ocr_service.py`, en/ar) → **text moderation** (`moderation_service.py`) → **dialect normalization + keyword detection** (`dialect_utils.py`) → bounded **+0.1** text-risk augment when matched → **vision** (`vision_service.py`) → **max** fusion and category (`analysis_orchestrator.py`). Dialect is **heuristic**, **deterministic**, and **fast**; it does not mutate frozen moderation outputs—only **post-process copies** in the orchestrator.
 
 ### 6.1 Entrypoint and API Contract
 
@@ -273,7 +273,7 @@ At startup (`@app.on_event("startup")`):
 Main file: `ai-service/app/services/ocr_service.py`
 
 - EasyOCR reader singleton
-- language set: `["en", "fr", "ar"]` (first run may download additional Arabic recognition weights, typically on the order of tens to low hundreds of MB)
+- language set: `["en", "ar"]` (EasyOCR does **not** allow `ar` with `fr` in the same reader; first run may download Arabic weights, typically tens–low hundreds of MB)
 - `verbose=False` on the_reader reduces console noise during batch processing
 - GPU used only when CUDA is truly usable
 - image thumbnail to `1280x1280` before OCR

@@ -1,7 +1,11 @@
 """
 EasyOCR wrapper: one shared ``Reader`` instance (expensive to construct).
 
-Languages: English, French, Arabic. GPU is used only when CUDA is verified usable.
+Languages: **English + Arabic** in one reader. EasyOCR does not allow Arabic together with
+French in the same ``lang_list`` (runtime error: Arabic is only compatible with English
+and a small set of other scripts). French screen text may still be partially picked up
+via Latin script / heuristic detection depending on content.
+GPU is used only when CUDA is verified usable.
 """
 
 from __future__ import annotations
@@ -17,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 _reader: Any = None
 
-_EASYOCR_LANGS = ["en", "fr", "ar"]
+# EasyOCR: ``ar`` cannot be combined with ``fr``; use ``en`` + ``ar`` per library constraint.
+_EASYOCR_LANGS = ["en", "ar"]
 
 
 def _cuda_usable_for_easyocr() -> bool:
@@ -44,6 +49,7 @@ def get_reader():
         import easyocr
 
         cuda_ok = _cuda_usable_for_easyocr()
+        _reader = easyocr.Reader(_EASYOCR_LANGS, gpu=cuda_ok, verbose=False)
         logger.info(
             "EasyOCR initialised | langs=%s | gpu=%s | torch=%s | cuda_available=%s",
             list(_EASYOCR_LANGS),
@@ -51,7 +57,6 @@ def get_reader():
             torch.__version__,
             torch.cuda.is_available(),
         )
-        _reader = easyocr.Reader(_EASYOCR_LANGS, gpu=cuda_ok, verbose=False)
     return _reader
 
 

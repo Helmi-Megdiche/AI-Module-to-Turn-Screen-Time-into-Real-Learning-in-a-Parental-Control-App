@@ -23,7 +23,7 @@ This document tracks **delivery status** and **next priorities** for the AI modu
 
 | Deliverable | Status |
 |-------------|--------|
-| Arabic OCR integration (EasyOCR `en` / `fr` / `ar`) | Done |
+| Arabic OCR integration (EasyOCR `en` / `ar`; `fr` excluded — incompatible with `ar` in same reader) | Done |
 | Arabizi normalization (digits + minimal Latin + whole-token map where needed) | Done |
 | Tunisian dialect moderation (lexicon + `tunisian_dialect_risk` + bounded `+0.1` text risk) | Done |
 | Unit testing | Done |
@@ -35,7 +35,7 @@ This document tracks **delivery status** and **next priorities** for the AI modu
 
 Ordered stages inside `POST /analyze` (text path):
 
-1. Screenshot in → decode image → **OCR** (EasyOCR `en` / `fr` / `ar`).
+1. Screenshot in → decode image → **OCR** (EasyOCR `en` / `ar`).
 2. **Text moderation** — zero-shot classification (`moderation_service`); unchanged by dialect code.
 3. **Dialect normalization layer** — token normalization (`dialect_utils`); **heuristic**, **deterministic**, **low-latency** (no extra transformer call).
 4. **Tunisian / Arabizi keyword detection** — dictionary match on normalized tokens.
