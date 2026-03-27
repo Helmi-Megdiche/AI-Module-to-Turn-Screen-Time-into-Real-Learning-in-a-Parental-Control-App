@@ -57,6 +57,7 @@ Use **Start monitoring** after all are granted. **Refresh status & log** reloads
 - If launcher/non-capturable foreground becomes active (or monitoring/projection stops), capture loop stops.
 - On projection invalidation (`MediaProjection` / `VirtualDisplay` failures), app runs silent recovery retries with balanced backoff (1s, 2s, 4s). If retries fail, it requests projection consent again and resumes capture loop on success.
 - Recovery path explicitly calls plugin `resetSession()` before re-consent so stale native objects from the previous projection session are not reused.
+- Recovery classifier also handles `Must request permission before take capture` and triggers the same recovery flow; a short post-consent stabilization delay is applied before marking projection ready.
 
 ## Backend URL
 

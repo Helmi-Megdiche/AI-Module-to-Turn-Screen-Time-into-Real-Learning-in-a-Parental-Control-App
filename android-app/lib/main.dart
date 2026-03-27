@@ -566,7 +566,8 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
         msg.contains('virtualdisplay') ||
         msg.contains('non-current') ||
         msg.contains('token') ||
-        msg.contains('must register a callback');
+        msg.contains('must register a callback') ||
+        msg.contains('must request permission before take capture');
   }
 
   Future<bool> _requestMediaProjectionAgain() async {
@@ -579,6 +580,9 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
       await Future<void>.delayed(const Duration(milliseconds: 300));
       final code = await _screenshot.requestPermission();
       await _traceToFile('projection re-consent result code=$code');
+      if (code == MediaProjectionCreator.ERROR_CODE_SUCCEED) {
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+      }
       return code == MediaProjectionCreator.ERROR_CODE_SUCCEED;
     } catch (e, st) {
       await _traceToFile('projection re-consent exception: $e', error: e, stackTrace: st);
@@ -692,6 +696,7 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     }
 
     await _traceToFile('projection OK isGranted=${MediaProjectionScreenshot.isGranted}');
+    await Future<void>.delayed(const Duration(milliseconds: 700));
     _projectionReady = true;
     _projectionRetryCount = 0;
     await _refreshPermissionMessage();
