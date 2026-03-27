@@ -76,6 +76,7 @@ Ordered stages inside `POST /analyze` (text path):
 ### Priority 3
 
 - OCR pipeline performance (caching, batching, model selection).
+- **Add French OCR** via a **second** EasyOCR reader (separate from `en`+`ar`) if full French screenshot text is required.
 - Batch screenshot analysis API (if product needs throughput).
 - Confidence calibration between vision and text risk (fused score interpretability).
 

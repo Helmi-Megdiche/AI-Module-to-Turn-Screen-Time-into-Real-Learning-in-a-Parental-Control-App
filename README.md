@@ -272,11 +272,13 @@ At startup (`@app.on_event("startup")`):
 
 Main file: `ai-service/app/services/ocr_service.py`
 
-- EasyOCR reader singleton
-- language set: `["en", "ar"]` (EasyOCR does **not** allow `ar` with `fr` in the same reader; first run may download Arabic weights, typically tens–low hundreds of MB)
-- `verbose=False` on the_reader reduces console noise during batch processing
-- GPU used only when CUDA is truly usable
-- image thumbnail to `1280x1280` before OCR
+- EasyOCR **single** reader: `["en", "ar"]` only (EasyOCR does **not** allow `ar` with `fr` in the same `lang_list`; first run may download Arabic weights, typically tens–low hundreds of MB)
+- **`verbose=False`** on the reader reduces console noise
+- **GPU** when `torch.cuda.is_available()` and `gpu=True` is passed to EasyOCR
+- Image **thumbnail** to `1280x1280` before OCR to bound memory and time
+- **Output:** unique words from all detections, **case-insensitive**, **sorted** and joined (deduplication reduces repeated token noise; order is not preserved)
+- **Degraded mode:** if EasyOCR fails to construct the reader (e.g. download error), startup continues; `extract_text` returns `""` and `/ready` reports `ocr_loaded: false`; **vision + text moderation** still run on the pipeline (moderation sees empty OCR unless text arrives from other paths)
+- **French OCR:** not supported in this reader. **French (or other Latin) text** that still appears in OCR output can be passed through as tokens the moderation model may partially handle. The architecture could add **French via a second EasyOCR reader** in a future change if product needs it.
 
 ### 6.3.1 Tunisian dialect support (heuristic)
 

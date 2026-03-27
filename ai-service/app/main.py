@@ -55,12 +55,15 @@ def startup_event() -> None:
             logger.warning("CUDA warm-up failed (EasyOCR may stay on CPU): %s", exc)
     # Block startup until OCR and moderation are initialized.
     try:
-        ocr_service.get_reader()
-        ocr_ready = True
-        logger.info("EasyOCR reader ready")
+        reader = ocr_service.get_reader()
+        ocr_ready = reader is not None
+        if ocr_ready:
+            logger.info("EasyOCR reader ready")
+        else:
+            logger.warning("EasyOCR unavailable; service continues with OCR degraded (empty text from OCR path).")
     except Exception as e:
         ocr_ready = False
-        logger.warning("Could not preload EasyOCR (will load on first request): %s", e)
+        logger.warning("Could not preload EasyOCR: %s", e)
     moderation_ready = initialize_moderation()
     if not moderation_ready:
         logger.error("Moderation model unavailable at startup; service running in degraded fallback-only mode")

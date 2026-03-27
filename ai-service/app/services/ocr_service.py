@@ -1,11 +1,9 @@
 """
 EasyOCR wrapper: one shared ``Reader`` instance (expensive to construct).
 
-Languages: **English + Arabic** in one reader. EasyOCR does not allow Arabic together with
-French in the same ``lang_list`` (runtime error: Arabic is only compatible with English
-and a small set of other scripts). French screen text may still be partially picked up
-via Latin script / heuristic detection depending on content.
-GPU is used only when CUDA is verified usable.
+Languages: **English + Arabic** only in a single reader (EasyOCR does not allow ``ar`` with
+``fr`` in the same ``lang_list``). If initialization fails, the reader stays unavailable and
+``extract_text`` returns ``""`` so the rest of the service can still run (vision + moderation).
 """
 
 from __future__ import annotations
@@ -20,52 +18,53 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 _reader: Any = None
+_reader_init_failed: bool = False
 
-# EasyOCR: ``ar`` cannot be combined with ``fr``; use ``en`` + ``ar`` per library constraint.
 _EASYOCR_LANGS = ["en", "ar"]
 
 
 def _cuda_usable_for_easyocr() -> bool:
-    """
-    EasyOCR only uses GPU when ``gpu=True`` *and* ``torch.cuda.is_available()`` inside its Reader.
-    Warm up CUDA here so the driver is ready before Reader runs (helps some Windows/uvicorn setups).
-    """
-    if not torch.cuda.is_available() or torch.cuda.device_count() < 1:
-        return False
     try:
-        torch.cuda.init()
-        _ = torch.zeros(1, device="cuda")
-        del _
-        return True
-    except Exception as exc:
-        logger.warning("CUDA not usable for EasyOCR, falling back to CPU: %s", exc)
+        return bool(torch.cuda.is_available())
+    except Exception:
         return False
 
 
-def get_reader():
-    """Lazily construct the global EasyOCR reader (GPU if CUDA available, else CPU)."""
-    global _reader
-    if _reader is None:
-        import easyocr
+def get_reader() -> Any | None:
+    """Lazily construct the global EasyOCR reader, or return None if loading failed."""
+    global _reader, _reader_init_failed
+    if _reader_init_failed:
+        return None
+    if _reader is not None:
+        return _reader
+    import easyocr
 
-        cuda_ok = _cuda_usable_for_easyocr()
+    cuda_ok = _cuda_usable_for_easyocr()
+    try:
         _reader = easyocr.Reader(_EASYOCR_LANGS, gpu=cuda_ok, verbose=False)
-        logger.info(
-            "EasyOCR initialised | langs=%s | gpu=%s | torch=%s | cuda_available=%s",
-            list(_EASYOCR_LANGS),
-            cuda_ok,
-            torch.__version__,
-            torch.cuda.is_available(),
-        )
-    return _reader
+        logger.info("EasyOCR initialised | langs=en,ar | gpu=%s", cuda_ok)
+        return _reader
+    except Exception as e:
+        logger.warning("Failed to load EasyOCR: %s", e)
+        _reader_init_failed = True
+        return None
 
 
 def extract_text(pil_image: Image.Image) -> str:
-    """Run detection+recognition, join line texts with spaces, strip ends."""
+    """Run OCR; return unique words (case-insensitive) sorted and joined, or \"\" if no reader."""
     reader = get_reader()
-    im = pil_image.copy()
-    im.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
-    arr = np.array(im)
-    result = reader.readtext(arr)
-    texts = [item[1] for item in result]
-    return " ".join(texts).strip()
+    if reader is None:
+        return ""
+    try:
+        im = pil_image.copy()
+        im.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
+        img_np = np.array(im)
+        result = reader.readtext(img_np)
+        words: set[str] = set()
+        for _bbox, text, _conf in result:
+            for word in text.split():
+                words.add(word.lower())
+        return " ".join(sorted(words)).strip()
+    except Exception as e:
+        logger.warning("OCR extraction failed: %s", e)
+        return ""
