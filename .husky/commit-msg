@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+cd "$(dirname "$0")/.." || exit 1
+
+# Strip IDE-injected "Made-with: Cursor" lines (project policy: no attribution footers).
+msg="$1"
+[ -z "$msg" ] || [ ! -f "$msg" ] && exit 0
+
+tmp="${msg}.husky-strip.$$"
+grep -vE '^[[:space:]]*[Mm]ade-[Ww]ith:[[:space:]]*[Cc]ursor[[:space:]]*$' "$msg" > "$tmp" && mv "$tmp" "$msg"
+exit 0

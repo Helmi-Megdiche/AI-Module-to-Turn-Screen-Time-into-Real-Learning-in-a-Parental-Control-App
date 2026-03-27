@@ -1,0 +1,10 @@
+---
+description: Git commits must not include Cursor or other IDE attribution footers.
+alwaysApply: true
+---
+
+# Git commit messages
+
+- Do **not** add `Made-with: Cursor`, co-author trailers from the IDE, or any similar attribution to commit bodies.
+- When creating commits from the agent, use a **single** `git commit -m "subject line"` (and optional `-m "body"` only if the user asked for a multi-paragraph description) with **no** IDE footer lines.
+- If the Cursor client injects a footer anyway, the repo `.husky/commit-msg` hook removes `Made-with: Cursor` lines; prefer plain messages so history stays clean without relying on the hook.
