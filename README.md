@@ -18,12 +18,15 @@ This system transforms passive screen time into guided real-world learning:
 ```mermaid
 flowchart LR
     UI[Demo UI<br/>HTML/JS] -->|POST /api/analyze| BE[Backend API<br/>Node.js + Express + Prisma]
+    APP[Android App<br/>Flutter + Workmanager] -->|POST /api/analyze| BE
     BE -->|POST /analyze| AI[AI Service<br/>FastAPI + EasyOCR + Transformers]
     AI -->|OCR + moderation result| BE
     BE -->|persist analysis + mission| DB[(PostgreSQL)]
     UI -->|GET summary/history/missions/badges| BE
     UI -->|POST /api/mission/result| BE
     UI -->|PUT /api/mission/:id/complete| BE
+    APP -->|GET /api/user/:id/summary| BE
+    APP -->|GET /api/user/:id/missions| BE
     BE -->|update points, completed missions, badges| DB
 ```
 
