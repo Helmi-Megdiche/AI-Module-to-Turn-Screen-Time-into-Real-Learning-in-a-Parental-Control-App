@@ -13,6 +13,20 @@ This system transforms passive screen time into guided real-world learning:
 - uses reward logic, parent validation, badges, and levels to drive healthy behavior
 - keeps the backend/AI contract stable for reliable integration
 
+### 1.1) Roadmap and AI capability summary
+
+Sprint-style progress and **next AI priorities** are tracked in **[ROADMAP.md](ROADMAP.md)**.
+
+**Delivered and validated (stable in pipeline):** **Arabic OCR + Tunisian dialect risk detection** — COMPLETED · TESTED · STABLE · INTEGRATED (`analysis_orchestrator` + `dialect_utils`).
+
+**AI module capabilities today:**
+
+- **Multilingual OCR:** English, French, Arabic (EasyOCR).
+- **Dialect-aware moderation (heuristic):** Arabizi-style normalization; digit-to-letter mapping (e.g. **3→ع**, **7→ح**); Tunisian risky-token dictionary; where Arabizi typing uses **9** for **ق** in fixed expressions (e.g. **قحبة**), **whole-token normalization** in `dialect_utils` applies; keyword flag **`tunisian_dialect_risk`**; **+0.1** text risk bump **bounded to 1.0**; then **fusion with vision** via `max`.
+- **Risk scoring:** text (moderation + optional dialect bump) + vision; **keyword explainability** in API payloads; downstream **missions / gamification** driven by backend rules from `riskScore` / `category`.
+
+**Dialect layer constraints:** does **not** change `moderate()` or internal moderation logic; **only augments** copied keyword list and text risk before vision fusion; **deterministic**, **fast**, compatible with **frozen** `ModerationResult`.
+
 ## 2) Architecture Overview
 
 ```mermaid
@@ -38,15 +52,19 @@ flowchart LR
 - `android-app/`: Flutter Android client that monitors foreground usage stats, captures the screen (MediaProjection), compresses, and uploads `POST /api/analyze` in the background — see [`android-app/README.md`](android-app/README.md) (vendored `media_projection_creator` + patched `media_projection_screenshot` for Android 14/15, including one reused `VirtualDisplay` per session for repeated `takeCapture` and explicit native `resetSession()` for re-consent recovery; captures all foreground apps except launcher/home; overlap guard; lifecycle pause/resume for battery; hourly capture cap; balanced projection auto-recovery with re-consent fallback; risk-adaptive interval via persisted worker policy; hardened handling for `Must request permission before take capture` with a short post-consent stabilization delay; manifest `FOREGROUND_SERVICE_MEDIA_PROJECTION`; scroll-safe layout when the keyboard is open).
 - `scripts/`: cross-stack test runner (`run-all-tests.js`, `run_tests.sh`)
 - `.husky/`: pre-commit test hook
+- **[ROADMAP.md](ROADMAP.md)**: PFE sprint/feature status, AI pipeline reference, next priorities
 
 ## 4) End-to-End Functional Pipeline
 
 1. Client sends `POST /api/analyze` with `{ userId, age, image? }`.
 2. If no image is provided, backend returns a safe preview (`riskScore: 0`) and does not persist analysis.
 3. If image is present, backend calls AI service `/analyze`.
-4. AI service decodes base64 image, runs OCR, then combines:
-   - text moderation (zero-shot classifier, fallback rules on failure)
-   - optional visual NSFW moderation
+4. AI service decodes base64 image and runs the **on-device AI pipeline** (see §6 and [ROADMAP.md](ROADMAP.md)):
+   - **OCR extraction** (EasyOCR **en / fr / ar**)
+   - **Text moderation** (zero-shot classifier, rule fallback on failure) — core logic unchanged by dialect layer
+   - **Dialect normalization + Tunisian / Arabizi keyword detection** (`dialect_utils`) — heuristic, deterministic, low-latency; optional augment only
+   - **Text risk adjustment** if dialect hits: **`tunisian_dialect_risk`** + canonical terms; **+0.1** to text risk **capped at 1.0**
+   - **Fusion with vision** — `max(adjusted_text_risk, vision_risk)` and merged keywords
 5. AI result is normalized to:
    - `text`, `displayText`, `matchedKeywords`, `riskScore`, `category`
 6. Backend creates `Analysis` + `Mission` (legacy text + optional structured interactive content).
@@ -215,6 +233,8 @@ Main file: `backend/src/services/badgeService.js`
 
 ## 6) AI Service (FastAPI / EasyOCR / Transformers)
 
+**Internal text pipeline (ordered):** screenshot / base64 image → **OCR** (`ocr_service.py`, en/fr/ar) → **text moderation** (`moderation_service.py`) → **dialect normalization + keyword detection** (`dialect_utils.py`) → bounded **+0.1** text-risk augment when matched → **vision** (`vision_service.py`) → **max** fusion and category (`analysis_orchestrator.py`). Dialect is **heuristic**, **deterministic**, and **fast**; it does not mutate frozen moderation outputs—only **post-process copies** in the orchestrator.
+
 ### 6.1 Entrypoint and API Contract
 
 Main file: `ai-service/app/main.py`
@@ -268,6 +288,7 @@ Main file: `ai-service/app/services/dialect_utils.py` (invoked from `analysis_or
 - **Dictionary lookup:** normalized tokens are checked against a fixed Arabic **risk lexicon**.
 - **API effect:** when a match is found, `matchedKeywords` gains `tunisian_dialect_risk` plus the canonical matched word(s), and the **text** risk score is increased by **+0.1** (capped at **1.0**) before merging with vision via `max`.
 - **Limitations:** dictionary-based, no deep semantic context; OCR errors can miss or distort tokens; tuned for demonstrator scope, not exhaustive dialect coverage.
+- **Compatibility:** does **not** alter `moderate()` or replace zero-shot logic; **augments** keyword list and text risk **only** in `analysis_orchestrator.py` via mutable copies; remains an **optional** layer in the sense that it no-ops when no lexicon match; outputs are **deterministic** for fixed OCR input.
 
 ### 6.4 Text Moderation Layer
 
