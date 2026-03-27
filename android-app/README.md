@@ -11,7 +11,7 @@ Flutter **Android** app (Dart package name `android_capture`, folder `android-ap
 ## Dependency notes
 
 - **`media_projection_creator`**: vendored under [`packages/media_projection_creator`](packages/media_projection_creator) with an Android patch (`registerReceiver` + `RECEIVER_NOT_EXPORTED` on API 33+) so screen-capture permission works on **Android 14 / 15** (e.g. Honor). The app uses **`dependency_overrides`** in `pubspec.yaml` so `media_projection_screenshot` still resolves.
-- **`media_projection_screenshot`**: vendored under [`packages/media_projection_screenshot`](packages/media_projection_screenshot) as **`0.0.6+patched2`** — **`0.0.6`** is missing **`registerCallback`** before **`createVirtualDisplay`** (Android 14+). **`patched2`** also reuses **one** `VirtualDisplay` per consent session so repeated **`takeCapture`** does not hit **`SecurityException`** (multiple **`createVirtualDisplay`** on the same **`MediaProjection`**).
+- **`media_projection_screenshot`**: vendored under [`packages/media_projection_screenshot`](packages/media_projection_screenshot) as **`0.0.6+patched2`** — **`0.0.6`** is missing **`registerCallback`** before **`createVirtualDisplay`** (Android 14+). **`patched2`** reuses one `VirtualDisplay` per consent session and exposes `resetSession()` to fully clear stale `MediaProjection`/`VirtualDisplay`/`ImageReader` state before recovery re-consent.
 - **`workmanager`**: `0.5.x` does not compile with the current Android toolchain (legacy embedding references). **`^0.7.0`** works with Flutter 3.24; **`0.9.x`** requires a newer Flutter SDK (3.32+).
 - **AGP 8 `namespace`**: older plugins omit it; `android/build.gradle.kts` sets `namespace` from each library’s manifest `package` when missing.
 
@@ -52,6 +52,7 @@ Use **Start monitoring** after all are granted. **Refresh status & log** reloads
   - otherwise -> 20s
 - If a non-target app becomes foreground (or monitoring/projection stops), capture loop stops.
 - On projection invalidation (`MediaProjection` / `VirtualDisplay` failures), app runs silent recovery retries with balanced backoff (1s, 2s, 4s). If retries fail, it requests projection consent again and resumes capture loop on success.
+- Recovery path explicitly calls plugin `resetSession()` before re-consent so stale native objects from the previous projection session are not reused.
 
 ## Backend URL
 

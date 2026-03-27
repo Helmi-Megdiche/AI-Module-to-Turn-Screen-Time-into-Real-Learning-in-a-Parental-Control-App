@@ -93,6 +93,11 @@ class MediaProjectionScreenshotPlugin : FlutterPlugin, MethodCallHandler, EventC
         stopCapture(result)
       }
 
+      "resetSession" -> {
+        resetSession()
+        result.success(true)
+      }
+
       else -> result.notImplemented()
     }
   }
@@ -151,6 +156,28 @@ class MediaProjectionScreenshotPlugin : FlutterPlugin, MethodCallHandler, EventC
     takeShotImageReader = null
     takeShotWidth = 0
     takeShotHeight = 0
+  }
+
+  private fun resetSession() {
+    try {
+      isLiving.set(false)
+
+      mVirtualDisplay?.release()
+      mVirtualDisplay = null
+      mImageReader?.surface?.release()
+      mImageReader?.close()
+      mImageReader = null
+
+      releaseTakeShotPipeline()
+      projectionCallbackRegistered.set(false)
+      mediaProjection = null
+      processingTime.set(System.currentTimeMillis())
+      counting.set(0)
+
+      Log.i(LOG_TAG, "MediaProjection session reset")
+    } catch (e: Exception) {
+      Log.e(LOG_TAG, "Error resetting session: ${e.message}")
+    }
   }
 
   private fun stopCapture(result: Result) {

@@ -57,4 +57,9 @@ class MediaProjectionScreenshot {
   Future<bool> stopCapture() async {
     return await MediaProjectionScreenshotPlatform.instance.stopCapture();
   }
+
+  Future<void> resetSession() async {
+    await MediaProjectionScreenshotPlatform.instance.resetSession();
+    _isGranted = false;
+  }
 }

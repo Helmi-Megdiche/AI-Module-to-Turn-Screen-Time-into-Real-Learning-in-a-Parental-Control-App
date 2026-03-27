@@ -35,4 +35,8 @@ abstract class MediaProjectionScreenshotPlatform extends PlatformInterface {
   Future<bool> stopCapture() {
     throw UnimplementedError('stopCapture() has not been implemented.');
   }
+
+  Future<void> resetSession() {
+    throw UnimplementedError('resetSession() has not been implemented.');
+  }
 }

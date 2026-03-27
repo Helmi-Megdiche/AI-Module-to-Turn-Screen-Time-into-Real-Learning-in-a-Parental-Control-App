@@ -46,4 +46,9 @@ class MethodChannelMediaProjectionScreenshot extends MediaProjectionScreenshotPl
   Future<bool> stopCapture() async {
     return await methodChannel.invokeMethod('stopCapture');
   }
+
+  @override
+  Future<void> resetSession() async {
+    await methodChannel.invokeMethod('resetSession');
+  }
 }

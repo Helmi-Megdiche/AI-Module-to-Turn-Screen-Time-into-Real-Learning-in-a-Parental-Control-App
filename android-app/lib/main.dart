@@ -505,6 +505,9 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
   Future<bool> _requestMediaProjectionAgain() async {
     try {
       await _traceToFile('projection re-consent requested');
+      await _traceToFile('projection session reset requested');
+      await _screenshot.resetSession();
+      await _traceToFile('projection session reset success');
       await MediaProjectionCreator.destroyMediaProjection();
       await Future<void>.delayed(const Duration(milliseconds: 300));
       final code = await _screenshot.requestPermission();
