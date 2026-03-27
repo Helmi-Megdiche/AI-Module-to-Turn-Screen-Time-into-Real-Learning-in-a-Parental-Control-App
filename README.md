@@ -276,7 +276,7 @@ Main file: `ai-service/app/services/ocr_service.py`
 - **`verbose=False`** on the reader reduces console noise
 - **GPU** when `torch.cuda.is_available()` and `gpu=True` is passed to EasyOCR
 - Image **thumbnail** to `1280x1280` before OCR to bound memory and time
-- **Output:** unique words from all detections, **case-insensitive**, **sorted** and joined (deduplication reduces repeated token noise; order is not preserved)
+- **Output:** unique words from all detections, **case-insensitive**, **first-seen order** (OCR box order, then word order within each box); duplicates skipped without reordering
 - **Degraded mode:** if EasyOCR fails to construct the reader (e.g. download error), startup continues; `extract_text` returns `""` and `/ready` reports `ocr_loaded: false`; **vision + text moderation** still run on the pipeline (moderation sees empty OCR unless text arrives from other paths)
 - **French OCR:** not supported in this reader. **French (or other Latin) text** that still appears in OCR output can be passed through as tokens the moderation model may partially handle. The architecture could add **French via a second EasyOCR reader** in a future change if product needs it.
 

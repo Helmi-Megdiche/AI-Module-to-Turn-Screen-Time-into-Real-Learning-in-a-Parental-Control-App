@@ -51,7 +51,7 @@ def get_reader() -> Any | None:
 
 
 def extract_text(pil_image: Image.Image) -> str:
-    """Run OCR; return unique words (case-insensitive) sorted and joined, or \"\" if no reader."""
+    """Run OCR; return unique words (case-insensitive) in first-seen order, or \"\" if no reader."""
     reader = get_reader()
     if reader is None:
         return ""
@@ -60,11 +60,15 @@ def extract_text(pil_image: Image.Image) -> str:
         im.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
         img_np = np.array(im)
         result = reader.readtext(img_np)
-        words: set[str] = set()
+        seen: set[str] = set()
+        words: list[str] = []
         for _bbox, text, _conf in result:
             for word in text.split():
-                words.add(word.lower())
-        return " ".join(sorted(words)).strip()
+                lower = word.lower()
+                if lower not in seen:
+                    seen.add(lower)
+                    words.append(lower)
+        return " ".join(words).strip()
     except Exception as e:
         logger.warning("OCR extraction failed: %s", e)
         return ""
