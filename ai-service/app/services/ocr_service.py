@@ -1,8 +1,7 @@
 """
 EasyOCR wrapper: one shared ``Reader`` instance (expensive to construct).
 
-Reads text from screenshot pixels. Currently configured for English (``["en"]``); extend the
-language list if you add multi-language support at the product level.
+Languages: English, French, Arabic. GPU is used only when CUDA is verified usable.
 """
 
 from __future__ import annotations
@@ -17,6 +16,8 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 _reader: Any = None
+
+_EASYOCR_LANGS = ["en", "fr", "ar"]
 
 
 def _cuda_usable_for_easyocr() -> bool:
@@ -44,12 +45,13 @@ def get_reader():
 
         cuda_ok = _cuda_usable_for_easyocr()
         logger.info(
-            "EasyOCR init | torch=%s | cuda_available=%s | using_gpu=%s",
+            "EasyOCR initialised | langs=%s | gpu=%s | torch=%s | cuda_available=%s",
+            list(_EASYOCR_LANGS),
+            cuda_ok,
             torch.__version__,
             torch.cuda.is_available(),
-            cuda_ok,
         )
-        _reader = easyocr.Reader(["en", "fr"], gpu=cuda_ok)
+        _reader = easyocr.Reader(_EASYOCR_LANGS, gpu=cuda_ok, verbose=False)
     return _reader
 
 
@@ -59,7 +61,6 @@ def extract_text(pil_image: Image.Image) -> str:
     im = pil_image.copy()
     im.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
     arr = np.array(im)
-    # Each item is (box, text, confidence)
     result = reader.readtext(arr)
     texts = [item[1] for item in result]
     return " ".join(texts).strip()

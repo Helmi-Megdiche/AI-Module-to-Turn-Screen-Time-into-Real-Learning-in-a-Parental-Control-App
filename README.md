@@ -253,9 +253,21 @@ At startup (`@app.on_event("startup")`):
 Main file: `ai-service/app/services/ocr_service.py`
 
 - EasyOCR reader singleton
-- language set: `["en", "fr"]`
+- language set: `["en", "fr", "ar"]` (first run may download additional Arabic recognition weights, typically on the order of tens to low hundreds of MB)
+- `verbose=False` on the_reader reduces console noise during batch processing
 - GPU used only when CUDA is truly usable
 - image thumbnail to `1280x1280` before OCR
+
+### 6.3.1 Tunisian dialect support (heuristic)
+
+Main file: `ai-service/app/services/dialect_utils.py` (invoked from `analysis_orchestrator.py` on the raw OCR string).
+
+- **Digit normalization:** Latin digits mapped to Arabic letters (single canonical table) for Arabizi-style typing.
+- **Latin fragments:** minimal suffix/prefix replacements applied only when the token already starts with an Arabic letter after digit mapping (limits false positives on pure English).
+- **Whole-token map:** a small set of Arabizi spellings that would be wrong under the digit table alone (e.g. `9ahba` → `قحبة`) are handled explicitly.
+- **Dictionary lookup:** normalized tokens are checked against a fixed Arabic **risk lexicon**.
+- **API effect:** when a match is found, `matchedKeywords` gains `tunisian_dialect_risk` plus the canonical matched word(s), and the **text** risk score is increased by **+0.1** (capped at **1.0**) before merging with vision via `max`.
+- **Limitations:** dictionary-based, no deep semantic context; OCR errors can miss or distort tokens; tuned for demonstrator scope, not exhaustive dialect coverage.
 
 ### 6.4 Text Moderation Layer
 
@@ -327,10 +339,12 @@ Main file: `ai-service/app/services/vision_service.py`
 
 Main file: `ai-service/app/services/analysis_orchestrator.py`
 
-- merges text moderation and vision moderation
+- runs **text moderation** on raw OCR text, then **Tunisian/Arabizi heuristic** detection on the same string (mutable copies of keywords/risk — `ModerationResult` is frozen)
+- merges adjusted text moderation with **vision moderation**
 - final risk is `max(textRisk, visionRisk)`
 - final keywords are concatenated text + vision indicators
 - category mapped from final risk using configured thresholds
+- optional log when dialect matches: `[DialectDetection] matches=[...]`
 
 ## 7) Database Schema Summary
 
@@ -643,6 +657,7 @@ Tests in `ai-service/tests/` cover:
 - Prisma schema/migrations/seed: `backend/prisma/`
 - AI entrypoint: `ai-service/app/main.py`
 - OCR: `ai-service/app/services/ocr_service.py`
+- Tunisian/Arabizi heuristics: `ai-service/app/services/dialect_utils.py`
 - Moderation: `ai-service/app/services/moderation_service.py`
 - Rule fallback: `ai-service/app/services/risk_scoring.py`
 - Vision moderation: `ai-service/app/services/vision_service.py`
