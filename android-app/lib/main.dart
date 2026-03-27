@@ -252,8 +252,12 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
   String? _lastForegroundPackage;
   String? _activeTargetPackage;
   bool _monitoring = false;
+  bool _projectionReady = false;
   bool _captureLoopRunning = false;
   bool _captureInProgress = false;
+  bool _projectionRecoveryInProgress = false;
+  int _projectionRetryCount = 0;
+  static const int _maxProjectionRetries = 3;
   DateTime? _lastPolicyReadAt;
   Duration _captureInterval = const Duration(seconds: 15);
   String _logText = '';
@@ -284,7 +288,9 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
       _stopCaptureLoop(reason: 'app_background');
     }
     if (state == AppLifecycleState.resumed) {
-      _startCaptureLoopIfNeeded();
+      if (_projectionReady && _activeTargetPackage != null) {
+        _startCaptureLoopIfNeeded();
+      }
       unawaited(_refreshPermissionMessage());
     }
   }
@@ -405,14 +411,8 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     if (_activeTargetPackage == null) {
       return;
     }
-    var projectionGranted = false;
-    try {
-      projectionGranted = MediaProjectionScreenshot.isGranted;
-    } catch (_) {
-      projectionGranted = false;
-    }
-    if (!projectionGranted) {
-      unawaited(_traceToFile('capture loop not started: projection not granted'));
+    if (!_projectionReady) {
+      unawaited(_traceToFile('capture loop not started: projection not ready'));
       return;
     }
 
@@ -451,7 +451,18 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
       await _traceToFile('capture skipped reason=no_target_foreground');
       return;
     }
-    if (!MediaProjectionScreenshot.isGranted) {
+    if (!_projectionReady) {
+      await _traceToFile('capture skipped reason=projection_not_ready');
+      return;
+    }
+    var granted = false;
+    try {
+      granted = MediaProjectionScreenshot.isGranted;
+    } catch (_) {
+      granted = false;
+    }
+    if (!granted) {
+      _projectionReady = false;
       await _traceToFile('capture skipped reason=projection_not_granted');
       _stopCaptureLoop(reason: 'projection_lost');
       return;
@@ -466,13 +477,110 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
       await _traceToFile('capture start pkg=$_activeTargetPackage');
       final ok = await _captureCompressSchedule();
       if (ok) {
+        _projectionRetryCount = 0;
         await _traceToFile('capture success');
       }
       await _loadLatestRiskPolicy();
+    } on PlatformException catch (e, st) {
+      await _traceToFile('capture platform error: ${e.message ?? e.code}', error: e, stackTrace: st);
+      if (_isProjectionInvalidError(e)) {
+        await _handleProjectionFailure(e.message ?? e.code);
+      }
     } catch (e, st) {
       await _traceToFile('capture error: $e', error: e, stackTrace: st);
     } finally {
       _captureInProgress = false;
+    }
+  }
+
+  bool _isProjectionInvalidError(Object error) {
+    final msg = error.toString().toLowerCase();
+    return msg.contains('mediaprojection') ||
+        msg.contains('virtualdisplay') ||
+        msg.contains('non-current') ||
+        msg.contains('token') ||
+        msg.contains('must register a callback');
+  }
+
+  Future<bool> _requestMediaProjectionAgain() async {
+    try {
+      await _traceToFile('projection re-consent requested');
+      await MediaProjectionCreator.destroyMediaProjection();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      final code = await _screenshot.requestPermission();
+      await _traceToFile('projection re-consent result code=$code');
+      return code == MediaProjectionCreator.ERROR_CODE_SUCCEED;
+    } catch (e, st) {
+      await _traceToFile('projection re-consent exception: $e', error: e, stackTrace: st);
+      return false;
+    }
+  }
+
+  Future<void> _handleProjectionFailure(String reason) async {
+    if (_projectionRecoveryInProgress) {
+      await _traceToFile('projection recovery already in progress');
+      return;
+    }
+    _projectionRecoveryInProgress = true;
+    _projectionReady = false;
+    _stopCaptureLoop(reason: 'projection_failure');
+    await _traceToFile('projection failure detected: $reason');
+
+    try {
+      final backoff = <Duration>[
+        const Duration(seconds: 1),
+        const Duration(seconds: 2),
+        const Duration(seconds: 4),
+      ];
+
+      for (var i = 0; i < backoff.length; i++) {
+        if (!_monitoring || _activeTargetPackage == null) {
+          await _traceToFile('projection recovery aborted: monitoring or target inactive');
+          return;
+        }
+        _projectionRetryCount = i + 1;
+        await _traceToFile(
+          'projection recovery retry $_projectionRetryCount/$_maxProjectionRetries wait=${backoff[i].inSeconds}s',
+        );
+        await Future<void>.delayed(backoff[i]);
+        try {
+          final ok = await _captureCompressSchedule();
+          if (ok) {
+            _projectionReady = true;
+            _projectionRetryCount = 0;
+            await _traceToFile('projection recovered silently');
+            _startCaptureLoopIfNeeded();
+            return;
+          }
+        } on PlatformException catch (e, st) {
+          await _traceToFile(
+            'projection retry failed: ${e.message ?? e.code}',
+            error: e,
+            stackTrace: st,
+          );
+        }
+      }
+
+      await _traceToFile('projection silent retries exhausted; requesting re-consent');
+      final consentOk = await _requestMediaProjectionAgain();
+      if (consentOk) {
+        _projectionReady = true;
+        _projectionRetryCount = 0;
+        await _traceToFile('projection recovered via re-consent');
+        await _refreshPermissionMessage();
+        _startCaptureLoopIfNeeded();
+        return;
+      }
+
+      _projectionReady = false;
+      if (mounted) {
+        setState(() {
+          _status = 'Screen capture permission expired. Tap Start monitoring to re-grant.';
+        });
+      }
+      await _traceToFile('projection recovery failed after retries + re-consent');
+    } finally {
+      _projectionRecoveryInProgress = false;
     }
   }
 
@@ -514,6 +622,8 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     }
 
     await _traceToFile('projection OK isGranted=${MediaProjectionScreenshot.isGranted}');
+    _projectionReady = true;
+    _projectionRetryCount = 0;
     await _refreshPermissionMessage();
     return true;
   }
@@ -545,6 +655,9 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     _pollTimer?.cancel();
     _pollTimer = null;
     _stopCaptureLoop(reason: 'monitoring_stopped');
+    _projectionReady = false;
+    _projectionRetryCount = 0;
+    _projectionRecoveryInProgress = false;
     setState(() {
       _monitoring = false;
       _lastForegroundPackage = null;
@@ -628,8 +741,13 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     CapturedImage? captured;
     try {
       captured = await _screenshot.takeCapture();
-    } catch (e) {
+    } on PlatformException catch (e) {
       await _traceToFile('takeCapture threw: $e', error: e);
+      await appendEventLog('takeCapture error: $e');
+      await _refreshLogFromDisk();
+      rethrow;
+    } catch (e, st) {
+      await _traceToFile('takeCapture exception: $e', error: e, stackTrace: st);
       await appendEventLog('takeCapture error: $e');
       await _refreshLogFromDisk();
       return false;

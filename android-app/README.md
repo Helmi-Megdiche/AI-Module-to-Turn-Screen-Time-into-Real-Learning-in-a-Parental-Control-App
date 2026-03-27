@@ -51,6 +51,7 @@ Use **Start monitoring** after all are granted. **Refresh status & log** reloads
   - `riskScore > 0.5` -> 10s
   - otherwise -> 20s
 - If a non-target app becomes foreground (or monitoring/projection stops), capture loop stops.
+- On projection invalidation (`MediaProjection` / `VirtualDisplay` failures), app runs silent recovery retries with balanced backoff (1s, 2s, 4s). If retries fail, it requests projection consent again and resumes capture loop on success.
 
 ## Backend URL
 
@@ -91,6 +92,8 @@ After **`adb reverse tcp:3000 tcp:3000`** and installing a **debug** build:
    Look for `[ParentalMonitor]` in the terminal, especially:
    - `capture loop started interval=...`
    - `capture start` / `capture success`
+   - `projection failure detected` + retry logs (`projection recovery retry ...`)
+   - `projection recovered silently` or `projection recovered via re-consent`
    - `Upload HTTP 200`
    - `risk policy updated riskScore=...`
 
