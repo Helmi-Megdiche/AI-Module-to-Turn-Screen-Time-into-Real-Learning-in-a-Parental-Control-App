@@ -233,7 +233,7 @@ Main file: `backend/src/services/badgeService.js`
 
 ## 6) AI Service (FastAPI / EasyOCR / Transformers)
 
-**Internal text pipeline (ordered):** screenshot / base64 image → **OCR** (`ocr_service.py`, en/ar) → **text moderation** (`moderation_service.py`) → **dialect normalization + keyword detection** (`dialect_utils.py`) → bounded **+0.1** text-risk augment when matched → **vision** (`vision_service.py`) → **max** fusion and category (`analysis_orchestrator.py`). Dialect is **heuristic**, **deterministic**, and **fast**; it does not mutate frozen moderation outputs—only **post-process copies** in the orchestrator.
+**Internal text pipeline (ordered):** screenshot / base64 image → **OCR** (`ocr_service.py`, en/ar) → **optional digit-ratio token filter** (`analysis_orchestrator.py`, default **on**) → **text moderation** (`moderation_service.py`) → **dialect normalization + keyword detection** (`dialect_utils.py`) on the **same filtered string** → bounded **+0.1** text-risk augment when matched → **vision** (`vision_service.py`) → **max** fusion and category (`analysis_orchestrator.py`). Dialect is **heuristic**, **deterministic**, and **fast**; it does not mutate frozen moderation outputs—only **post-process copies** in the orchestrator.
 
 ### 6.1 Entrypoint and API Contract
 
@@ -277,12 +277,13 @@ Main file: `ai-service/app/services/ocr_service.py`
 - **GPU** when `torch.cuda.is_available()` and `gpu=True` is passed to EasyOCR
 - Image **thumbnail** to `1280x1280` before OCR to bound memory and time
 - **Output:** unique words from all detections, **case-insensitive**, **first-seen order** (OCR box order, then word order within each box); duplicates skipped without reordering
+- **Digit-heavy token filter:** implemented in `ocr_text_cleanup.py`, applied from `analysis_orchestrator.py` before moderation and dialect detection. Whitespace-separated tokens where the fraction of digit characters **exceeds** `OCR_DIGIT_RATIO_THRESHOLD` (default **0.5**) are dropped (tokens are kept when `digits/len(word) <=` the threshold). This trims garbled OCR (e.g. `100k`, `m54`) that can confuse zero-shot NLI, while keeping typical Arabizi/Latin words. Disable with `ENABLE_OCR_CLEANUP=false` if needed; lower the threshold (e.g. **0.45**) to drop borderline half-digit tokens such as `80u2el`.
 - **Degraded mode:** if EasyOCR fails to construct the reader (e.g. download error), startup continues; `extract_text` returns `""` and `/ready` reports `ocr_loaded: false`; **vision + text moderation** still run on the pipeline (moderation sees empty OCR unless text arrives from other paths)
 - **French OCR:** not supported in this reader. **French (or other Latin) text** that still appears in OCR output can be passed through as tokens the moderation model may partially handle. The architecture could add **French via a second EasyOCR reader** in a future change if product needs it.
 
 ### 6.3.1 Tunisian dialect support (heuristic)
 
-Main file: `ai-service/app/services/dialect_utils.py` (invoked from `analysis_orchestrator.py` on the raw OCR string).
+Main file: `ai-service/app/services/dialect_utils.py` (invoked from `analysis_orchestrator.py` on the OCR string **after** optional digit-ratio cleanup).
 
 - **Digit normalization:** Latin digits mapped to Arabic letters (single canonical table) for Arabizi-style typing.
 - **Latin fragments:** minimal suffix/prefix replacements applied only when the token already starts with an Arabic letter after digit mapping (limits false positives on pure English).
@@ -362,7 +363,8 @@ Main file: `ai-service/app/services/vision_service.py`
 
 Main file: `ai-service/app/services/analysis_orchestrator.py`
 
-- runs **text moderation** on raw OCR text, then **Tunisian/Arabizi heuristic** detection on the same string (mutable copies of keywords/risk — `ModerationResult` is frozen)
+- applies **digit-ratio OCR cleanup** when `ENABLE_OCR_CLEANUP` is true (default), then runs **text moderation** and **Tunisian/Arabizi heuristic** detection on that string (mutable copies of keywords/risk — `ModerationResult` is frozen)
+- API `text` / `displayText` reflect the **post-cleanup** string used for scoring (not the raw OCR concat before filtering)
 - merges adjusted text moderation with **vision moderation**
 - final risk is `max(textRisk, visionRisk)`
 - final keywords are concatenated text + vision indicators
@@ -390,7 +392,7 @@ Defined in `backend/prisma/schema.prisma`.
 ### 7.2 Analysis
 
 - moderation record:
-  - raw OCR `text`
+  - OCR `text` (after optional digit-ratio cleanup when enabled)
   - parent-facing `displayText`
   - `matchedKeywords` JSON
   - `riskScore`, `category`
@@ -547,6 +549,8 @@ From `ai-service/app/config.py`:
 - `MODERATION_STARTUP_MODEL_LOAD_TIMEOUT_SECONDS`
 - `VISION_MODEL_NAME` (default `Ateeqq/nsfw-image-detection`)
 - `VISION_MATCHED_KEYWORDS_THRESHOLD` (default `0.5`)
+- `ENABLE_OCR_CLEANUP` (default `true`) — digit-ratio token filter before moderation
+- `OCR_DIGIT_RATIO_THRESHOLD` (default `0.5`) — keep token if `digits/len <=` this value
 
 ### 9.3 Test Runner Environment
 
@@ -685,6 +689,7 @@ Tests in `ai-service/tests/` cover:
 - Rule fallback: `ai-service/app/services/risk_scoring.py`
 - Vision moderation: `ai-service/app/services/vision_service.py`
 - Orchestrator: `ai-service/app/services/analysis_orchestrator.py`
+- OCR text cleanup (digit ratio): `ai-service/app/services/ocr_text_cleanup.py`
 - Demo UI: `demo/index.html`
 - Test runner: `scripts/run-all-tests.js`
 

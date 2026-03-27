@@ -32,6 +32,14 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+def _bool_env(name: str, default: bool) -> bool:
+    """Read truthy ``os.environ[name]`` or return ``default`` if unset/invalid."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
 ZERO_SHOT_MODEL_NAME = os.getenv(
     "MODERATION_MODEL_NAME",
     "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli",
@@ -64,3 +72,7 @@ VISION_MODEL_NAME = os.getenv(
     "Ateeqq/nsfw-image-detection",
 )
 VISION_MATCHED_KEYWORDS_THRESHOLD = _float_env("VISION_MATCHED_KEYWORDS_THRESHOLD", 0.5)
+
+# OCR: drop digit-heavy tokens before moderation (reduces false positives on garbled OCR)
+ENABLE_OCR_CLEANUP = _bool_env("ENABLE_OCR_CLEANUP", True)
+OCR_DIGIT_RATIO_THRESHOLD = _float_env("OCR_DIGIT_RATIO_THRESHOLD", 0.5)

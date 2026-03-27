@@ -14,9 +14,11 @@ from typing import Optional
 
 from PIL import Image
 
+from app import config
 from app.services import vision_service
 from app.services.dialect_utils import contains_risky_dialect
 from app.services.moderation_service import category_from_model_score, moderate
+from app.services.ocr_text_cleanup import clean_ocr_text
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +43,12 @@ def build_analyze_response_from_plain_text(
 
     Final risk score uses the max of text and vision scores.
     """
-    text_mod = moderate(raw)
-    dialect_risk, dialect_matches = contains_risky_dialect(raw)
+    effective = raw
+    if config.ENABLE_OCR_CLEANUP and raw:
+        effective = clean_ocr_text(raw, digit_ratio_threshold=config.OCR_DIGIT_RATIO_THRESHOLD)
+
+    text_mod = moderate(effective)
+    dialect_risk, dialect_matches = contains_risky_dialect(effective)
     text_keywords = list(text_mod.matched_keywords)
     text_risk = float(text_mod.risk_score)
     if dialect_risk:
@@ -59,7 +65,7 @@ def build_analyze_response_from_plain_text(
     risk_score = max(text_risk, vision_risk)
     matched_keywords = text_keywords + list(vision_mod["matchedKeywords"])
     return ScreenshotAnalysisResult(
-        text=raw,
+        text=effective,
         display_text=text_mod.display_text,
         matched_keywords=matched_keywords,
         risk_score=round(risk_score, 2),
