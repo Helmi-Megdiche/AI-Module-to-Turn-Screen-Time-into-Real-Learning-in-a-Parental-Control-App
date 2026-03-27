@@ -28,6 +28,7 @@ const List<String> kTargetApps = [
 
 const String kLogFileName = 'event_log.txt';
 const String kUploadTaskName = 'uploadAnalyzeTask';
+const String kCapturePolicyFileName = 'capture_policy.json';
 
 /// Terminal: `flutter run` → stdout / Run tab. APK only: `adb logcat -s flutter MediaProjectionPatch`.
 void _trace(String message, {Object? error, StackTrace? stackTrace}) {
@@ -54,10 +55,49 @@ Future<File> _logFile() async {
   return File('${dir.path}/$kLogFileName');
 }
 
+Future<File> _capturePolicyFile() async {
+  final dir = await getApplicationDocumentsDirectory();
+  return File('${dir.path}/$kCapturePolicyFileName');
+}
+
 Future<void> appendEventLog(String message) async {
   final f = await _logFile();
   final ts = DateTime.now().toIso8601String();
   await f.writeAsString('$ts $message\n', mode: FileMode.append, flush: true);
+}
+
+double? _parseRiskScoreFromResponse(Map<String, dynamic>? data) {
+  if (data == null) {
+    return null;
+  }
+
+  dynamic v = data['riskScore'];
+  if (v == null) {
+    final analysis = data['analysis'];
+    if (analysis is Map) {
+      v = analysis['riskScore'] ?? analysis['risk'];
+    }
+  }
+
+  if (v is num) {
+    return v.toDouble().clamp(0.0, 1.0);
+  }
+  if (v is String) {
+    final parsed = double.tryParse(v);
+    if (parsed != null) {
+      return parsed.clamp(0.0, 1.0);
+    }
+  }
+  return null;
+}
+
+Future<void> _persistRiskScore(double riskScore) async {
+  final policy = await _capturePolicyFile();
+  final payload = <String, dynamic>{
+    'riskScore': riskScore,
+    'updatedAt': DateTime.now().toIso8601String(),
+  };
+  await policy.writeAsString(jsonEncode(payload), flush: true);
 }
 
 @pragma('vm:entry-point')
@@ -83,6 +123,7 @@ void callbackDispatcher() {
       return Future.value(true);
     }
 
+    await _traceToFile('upload started');
     await _traceToFile('Upload POST $baseUrl/api/analyze file=$filePath');
 
     final file = File(filePath);
@@ -114,6 +155,23 @@ void callbackDispatcher() {
 
       final data = response.data;
       await _traceToFile('Upload HTTP ${response.statusCode}');
+      await _traceToFile('upload success');
+
+      final riskScore = _parseRiskScoreFromResponse(data);
+      if (riskScore != null) {
+        try {
+          await _persistRiskScore(riskScore);
+          await _traceToFile('risk policy updated riskScore=$riskScore');
+        } catch (e, st) {
+          await _traceToFile(
+            'risk policy write failed: $e',
+            error: e,
+            stackTrace: st,
+          );
+        }
+      } else {
+        await _traceToFile('risk policy skipped: no risk score in response');
+      }
 
       if (data != null && data['success'] == true) {
         final mission = data['mission'];
@@ -190,8 +248,14 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
   final MediaProjectionScreenshot _screenshot = MediaProjectionScreenshot();
 
   Timer? _pollTimer;
+  Timer? _captureTimer;
   String? _lastForegroundPackage;
+  String? _activeTargetPackage;
   bool _monitoring = false;
+  bool _captureLoopRunning = false;
+  bool _captureInProgress = false;
+  DateTime? _lastPolicyReadAt;
+  Duration _captureInterval = const Duration(seconds: 15);
   String _logText = '';
   String _status = 'Grant permissions, then start monitoring.';
 
@@ -206,6 +270,7 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _pollTimer?.cancel();
+    _stopCaptureLoop(reason: 'dispose');
     _userIdController.dispose();
     _ageController.dispose();
     _baseUrlController.dispose();
@@ -215,8 +280,12 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     unawaited(_traceToFile('lifecycle=$state MediaProjection.isGranted=${MediaProjectionScreenshot.isGranted}'));
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      _stopCaptureLoop(reason: 'app_background');
+    }
     if (state == AppLifecycleState.resumed) {
-      _refreshPermissionMessage();
+      _startCaptureLoopIfNeeded();
+      unawaited(_refreshPermissionMessage());
     }
   }
 
@@ -260,6 +329,150 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     ];
     if (mounted) {
       setState(() => _status = parts.join(' · '));
+    }
+  }
+
+  Duration _captureIntervalForRisk(double riskScore) {
+    if (riskScore > 0.8) {
+      return const Duration(seconds: 5);
+    }
+    if (riskScore > 0.5) {
+      return const Duration(seconds: 10);
+    }
+    return const Duration(seconds: 20);
+  }
+
+  Future<void> _loadLatestRiskPolicy() async {
+    try {
+      final policyFile = await _capturePolicyFile();
+      if (!await policyFile.exists()) {
+        return;
+      }
+      final raw = await policyFile.readAsString();
+      final dynamic decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return;
+      }
+
+      final rawTs = decoded['updatedAt']?.toString();
+      if (rawTs == null) {
+        return;
+      }
+      final ts = DateTime.tryParse(rawTs);
+      if (ts == null) {
+        return;
+      }
+      if (_lastPolicyReadAt != null && !ts.isAfter(_lastPolicyReadAt!)) {
+        return;
+      }
+      _lastPolicyReadAt = ts;
+
+      final rawRisk = decoded['riskScore'];
+      final riskScore = rawRisk is num
+          ? rawRisk.toDouble()
+          : double.tryParse(rawRisk?.toString() ?? '');
+      if (riskScore == null) {
+        return;
+      }
+      _updateCaptureIntervalFromRisk(riskScore.clamp(0.0, 1.0));
+    } catch (e, st) {
+      await _traceToFile(
+        'risk policy read failed: $e',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
+
+  void _updateCaptureIntervalFromRisk(double riskScore) {
+    final newInterval = _captureIntervalForRisk(riskScore);
+    if (newInterval == _captureInterval) {
+      return;
+    }
+    _captureInterval = newInterval;
+    unawaited(
+      _traceToFile(
+        'capture interval updated riskScore=$riskScore interval=${_captureInterval.inSeconds}s',
+      ),
+    );
+    _restartCaptureLoop();
+  }
+
+  void _startCaptureLoopIfNeeded() {
+    if (_captureLoopRunning || !_monitoring) {
+      return;
+    }
+    if (_activeTargetPackage == null) {
+      return;
+    }
+    var projectionGranted = false;
+    try {
+      projectionGranted = MediaProjectionScreenshot.isGranted;
+    } catch (_) {
+      projectionGranted = false;
+    }
+    if (!projectionGranted) {
+      unawaited(_traceToFile('capture loop not started: projection not granted'));
+      return;
+    }
+
+    _captureLoopRunning = true;
+    unawaited(
+      _traceToFile(
+        'capture loop started interval=${_captureInterval.inSeconds}s pkg=$_activeTargetPackage',
+      ),
+    );
+    _captureTimer = Timer.periodic(_captureInterval, (_) {
+      unawaited(_safeCapture());
+    });
+    unawaited(_safeCapture());
+  }
+
+  void _stopCaptureLoop({String reason = 'manual'}) {
+    if (_captureTimer == null && !_captureLoopRunning) {
+      return;
+    }
+    _captureTimer?.cancel();
+    _captureTimer = null;
+    _captureLoopRunning = false;
+    unawaited(_traceToFile('capture loop stopped reason=$reason'));
+  }
+
+  void _restartCaptureLoop() {
+    _stopCaptureLoop(reason: 'interval_update');
+    _startCaptureLoopIfNeeded();
+  }
+
+  Future<void> _safeCapture() async {
+    if (!_monitoring) {
+      return;
+    }
+    if (_activeTargetPackage == null) {
+      await _traceToFile('capture skipped reason=no_target_foreground');
+      return;
+    }
+    if (!MediaProjectionScreenshot.isGranted) {
+      await _traceToFile('capture skipped reason=projection_not_granted');
+      _stopCaptureLoop(reason: 'projection_lost');
+      return;
+    }
+    if (_captureInProgress) {
+      await _traceToFile('capture skipped reason=in_progress');
+      return;
+    }
+
+    _captureInProgress = true;
+    try {
+      await _traceToFile('capture start pkg=$_activeTargetPackage');
+      final ok = await _captureCompressSchedule();
+      if (ok) {
+        await _traceToFile('capture success');
+      }
+      await _loadLatestRiskPolicy();
+    } catch (e, st) {
+      await _traceToFile('capture error: $e', error: e, stackTrace: st);
+    } finally {
+      _captureInProgress = false;
     }
   }
 
@@ -325,14 +538,17 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _pollUsage());
     await _pollUsage();
+    _startCaptureLoopIfNeeded();
   }
 
   void _stopMonitoring() {
     _pollTimer?.cancel();
     _pollTimer = null;
+    _stopCaptureLoop(reason: 'monitoring_stopped');
     setState(() {
       _monitoring = false;
       _lastForegroundPackage = null;
+      _activeTargetPackage = null;
     });
     unawaited(appendEventLog('Monitoring stopped.'));
     unawaited(_refreshLogFromDisk());
@@ -381,23 +597,31 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
       return;
     }
     final pkg = latest.packageName!;
-    if (pkg == _lastForegroundPackage) {
-      return;
-    }
+    final changed = pkg != _lastForegroundPackage;
     _lastForegroundPackage = pkg;
+    final isTarget = kTargetApps.contains(pkg);
 
-    if (!kTargetApps.contains(pkg)) {
+    if (changed) {
+      await _traceToFile('foreground package=$pkg target=$isTarget');
+      if (isTarget) {
+        await appendEventLog('Target app foreground: $pkg');
+      }
+      await _refreshLogFromDisk();
+    }
+
+    if (!isTarget) {
+      _activeTargetPackage = null;
+      _stopCaptureLoop(reason: 'non_target_foreground');
       return;
     }
 
-    await appendEventLog('Target app foreground: $pkg');
-    await _refreshLogFromDisk();
-    await _captureCompressSchedule();
+    _activeTargetPackage = pkg;
+    _startCaptureLoopIfNeeded();
   }
 
-  Future<void> _captureCompressSchedule() async {
+  Future<bool> _captureCompressSchedule() async {
     if (!mounted) {
-      return;
+      return false;
     }
 
     await _traceToFile('takeCapture() start isGranted=${MediaProjectionScreenshot.isGranted}');
@@ -408,14 +632,14 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
       await _traceToFile('takeCapture threw: $e', error: e);
       await appendEventLog('takeCapture error: $e');
       await _refreshLogFromDisk();
-      return;
+      return false;
     }
 
     if (captured == null) {
       await _traceToFile('takeCapture returned null');
       await appendEventLog('takeCapture returned null (permission or capture failure).');
       await _refreshLogFromDisk();
-      return;
+      return false;
     }
 
     await appendEventLog('Screenshot captured (${captured.bytes.length} bytes PNG).');
@@ -442,7 +666,7 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     if (compressed == null) {
       await appendEventLog('Compression failed.');
       await _refreshLogFromDisk();
-      return;
+      return false;
     }
 
     final outLen = await compressed.length();
@@ -454,12 +678,12 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     if (userId <= 0) {
       await appendEventLog('Invalid userId; set a positive integer.');
       await _refreshLogFromDisk();
-      return;
+      return false;
     }
     if (age < 0) {
       await appendEventLog('Invalid age.');
       await _refreshLogFromDisk();
-      return;
+      return false;
     }
 
     final base = _baseUrlController.text.trim();
@@ -478,6 +702,7 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
 
     await appendEventLog('Upload scheduled: $unique');
     await _refreshLogFromDisk();
+    return true;
   }
 
   @override

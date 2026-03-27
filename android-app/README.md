@@ -40,6 +40,18 @@ Output: `build/app/outputs/flutter-apk/app-debug.apk`.
 
 Use **Start monitoring** after all are granted. **Refresh status & log** reloads the shared log file under the app documents directory (`event_log.txt`).
 
+## Continuous target-session capture (Android 14+)
+
+- Monitoring polls usage every 5 seconds to detect current foreground package.
+- If a package in `kTargetApps` is foreground, a capture loop runs periodically (default 15s).
+- Captures are serialized with an in-progress guard to prevent overlap when upload is slow.
+- Upload stays in Workmanager isolate; worker persists latest `riskScore` to `capture_policy.json`.
+- UI isolate reads `capture_policy.json` and adapts interval:
+  - `riskScore > 0.8` -> 5s
+  - `riskScore > 0.5` -> 10s
+  - otherwise -> 20s
+- If a non-target app becomes foreground (or monitoring/projection stops), capture loop stops.
+
 ## Backend URL
 
 | Environment   | Base URL example |
@@ -76,7 +88,11 @@ After **`adb reverse tcp:3000 tcp:3000`** and installing a **debug** build:
    flutter run -d <deviceId>
    ```
 
-   Look for `[ParentalMonitor]` in the terminal.
+   Look for `[ParentalMonitor]` in the terminal, especially:
+   - `capture loop started interval=...`
+   - `capture start` / `capture success`
+   - `Upload HTTP 200`
+   - `risk policy updated riskScore=...`
 
 2. **Native MediaProjection log** (any install):
 
