@@ -366,8 +366,8 @@ Main file: `ai-service/app/services/analysis_orchestrator.py`
 - applies **digit-ratio OCR cleanup** when `ENABLE_OCR_CLEANUP` is true (default), then runs **text moderation** and **Tunisian/Arabizi heuristic** detection on that string (mutable copies of keywords/risk — `ModerationResult` is frozen)
 - API `text` / `displayText` reflect the **post-cleanup** string used for scoring (not the raw OCR concat before filtering)
 - merges adjusted text moderation with **vision moderation**
-- final risk is `max(textRisk, visionRisk)`
-- final keywords are concatenated text + vision indicators
+- final risk is `max(textRisk, visionRisk)`; final keywords are concatenated text + vision indicators
+- **Sexual-content-only safeguard:** if merged `matchedKeywords` is exactly `["sexual content"]` and the merged risk is **≥ `MODERATION_DANGEROUS_THRESHOLD`** (default **0.85**), the score is **capped at 0.6** (still **risky**, not **dangerous**) to cut false positives on noisy OCR. The keyword list is unchanged for transparency. Any extra keyword (e.g. `nsfw visual`, `tunisian_dialect_risk`, another text label) skips the cap so genuinely ambiguous or multi-signal content is unaffected.
 - category mapped from final risk using configured thresholds
 - optional log when dialect matches: `[DialectDetection] matches=[...]`
 
@@ -688,7 +688,7 @@ Tests in `ai-service/tests/` cover:
 - Moderation: `ai-service/app/services/moderation_service.py`
 - Rule fallback: `ai-service/app/services/risk_scoring.py`
 - Vision moderation: `ai-service/app/services/vision_service.py`
-- Orchestrator: `ai-service/app/services/analysis_orchestrator.py`
+- Orchestrator: `ai-service/app/services/analysis_orchestrator.py` (includes sexual-content-only risk cap; see §6.7)
 - OCR text cleanup (digit ratio): `ai-service/app/services/ocr_text_cleanup.py`
 - Demo UI: `demo/index.html`
 - Test runner: `scripts/run-all-tests.js`

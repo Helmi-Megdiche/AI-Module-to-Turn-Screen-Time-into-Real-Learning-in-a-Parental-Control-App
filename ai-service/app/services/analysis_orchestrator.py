@@ -22,6 +22,27 @@ from app.services.ocr_text_cleanup import clean_ocr_text
 
 logger = logging.getLogger(__name__)
 
+# When text+vision merge yields only "sexual content" above thresholds, raw scores can be
+# falsely "dangerous" on noisy OCR; cap keeps parents alerted without max severity.
+_SEXUAL_CONTENT_ONLY_CAP = 0.6
+
+
+def _apply_sexual_content_safeguard(
+    risk_score: float,
+    matched_keywords: list[str],
+) -> tuple[float, list[str]]:
+    """
+    If the only high-confidence label is ``sexual content`` and risk is at/above the
+    dangerous threshold, cap risk at **0.6** (risky band) to reduce false positives.
+
+    Multiple labels or any non-sexual keyword (e.g. vision, dialect) leaves the score unchanged.
+    """
+    if risk_score < config.DANGEROUS_THRESHOLD:
+        return risk_score, matched_keywords
+    if matched_keywords == ["sexual content"]:
+        return _SEXUAL_CONTENT_ONLY_CAP, matched_keywords
+    return risk_score, matched_keywords
+
 
 @dataclass(frozen=True)
 class ScreenshotAnalysisResult:
@@ -64,10 +85,15 @@ def build_analyze_response_from_plain_text(
     vision_risk = float(vision_mod["riskScore"])
     risk_score = max(text_risk, vision_risk)
     matched_keywords = text_keywords + list(vision_mod["matchedKeywords"])
+    risk_score, matched_keywords = _apply_sexual_content_safeguard(
+        risk_score,
+        matched_keywords,
+    )
+    risk_score = round(risk_score, 2)
     return ScreenshotAnalysisResult(
         text=effective,
         display_text=text_mod.display_text,
         matched_keywords=matched_keywords,
-        risk_score=round(risk_score, 2),
+        risk_score=risk_score,
         category=category_from_model_score(risk_score),
     )
