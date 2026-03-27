@@ -12,6 +12,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:media_projection_creator/media_projection_creator.dart';
 import 'package:media_projection_screenshot/captured_image.dart';
 import 'package:media_projection_screenshot/media_projection_screenshot.dart';
+import 'package:device_apps/device_apps.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:usage_stats/usage_stats.dart';
@@ -20,15 +21,10 @@ import 'package:workmanager/workmanager.dart';
 /// Android [UsageEvents.Event.MOVE_TO_FOREGROUND](https://developer.android.com/reference/android/app/usage/UsageEvents.Event#MOVE_TO_FOREGROUND).
 const String _kMoveToForeground = '1';
 
-const List<String> kTargetApps = [
-  'com.google.android.youtube',
-  'com.instagram.android',
-  'com.facebook.katana',
-];
-
 const String kLogFileName = 'event_log.txt';
 const String kUploadTaskName = 'uploadAnalyzeTask';
 const String kCapturePolicyFileName = 'capture_policy.json';
+const int _maxCapturesPerHour = 120;
 
 /// Terminal: `flutter run` → stdout / Run tab. APK only: `adb logcat -s flutter MediaProjectionPatch`.
 void _trace(String message, {Object? error, StackTrace? stackTrace}) {
@@ -246,11 +242,13 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
   final TextEditingController _ageController = TextEditingController(text: '10');
   final TextEditingController _baseUrlController = TextEditingController(text: 'http://10.0.2.2:3000');
   final MediaProjectionScreenshot _screenshot = MediaProjectionScreenshot();
+  static const MethodChannel _systemChannel = MethodChannel('com.example.android_capture/system');
 
   Timer? _pollTimer;
   Timer? _captureTimer;
   String? _lastForegroundPackage;
   String? _activeTargetPackage;
+  String? _launcherPackage;
   bool _monitoring = false;
   bool _projectionReady = false;
   bool _captureLoopRunning = false;
@@ -258,6 +256,8 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
   bool _projectionRecoveryInProgress = false;
   int _projectionRetryCount = 0;
   static const int _maxProjectionRetries = 3;
+  int _capturesThisHour = 0;
+  DateTime _hourStart = DateTime.now();
   DateTime? _lastPolicyReadAt;
   Duration _captureInterval = const Duration(seconds: 15);
   String _logText = '';
@@ -268,6 +268,7 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _refreshLogFromDisk();
+    unawaited(_fetchLauncherPackage());
   }
 
   @override
@@ -284,14 +285,66 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     unawaited(_traceToFile('lifecycle=$state MediaProjection.isGranted=${MediaProjectionScreenshot.isGranted}'));
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
       _stopCaptureLoop(reason: 'app_background');
     }
     if (state == AppLifecycleState.resumed) {
-      if (_projectionReady && _activeTargetPackage != null) {
+      if (_monitoring && _projectionReady && _activeTargetPackage != null) {
         _startCaptureLoopIfNeeded();
       }
       unawaited(_refreshPermissionMessage());
+    }
+  }
+
+  Future<void> _fetchLauncherPackage() async {
+    const launcherCandidates = <String>[
+      'com.hihonor.android.launcher',
+      'com.huawei.android.launcher',
+      'com.android.launcher3',
+      'com.google.android.apps.nexuslauncher',
+      'com.sec.android.app.launcher',
+      'com.miui.home',
+      'com.oppo.launcher',
+      'com.vivo.launcher',
+      'com.transsion.XOSLauncher',
+    ];
+    try {
+      final detected =
+          await _systemChannel.invokeMethod<String>('getDefaultLauncherPackage');
+      if (detected != null && detected.isNotEmpty) {
+        _launcherPackage = detected;
+        await _traceToFile('launcher package detected=$_launcherPackage (native)');
+        return;
+      }
+    } catch (e, st) {
+      await _traceToFile(
+        'launcher package native detection failed: $e',
+        error: e,
+        stackTrace: st,
+      );
+    }
+
+    try {
+      final installed = await DeviceApps.getInstalledApplications(
+        onlyAppsWithLaunchIntent: true,
+      );
+      final installedPackages = installed.map((e) => e.packageName).toSet();
+      _launcherPackage = launcherCandidates.firstWhere(
+        installedPackages.contains,
+        orElse: () => '',
+      );
+      if (_launcherPackage!.isEmpty) {
+        _launcherPackage = null;
+      }
+      await _traceToFile('launcher package detected=$_launcherPackage');
+    } catch (e, st) {
+      await _traceToFile(
+        'launcher package detection failed: $e',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 
@@ -448,7 +501,7 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
       return;
     }
     if (_activeTargetPackage == null) {
-      await _traceToFile('capture skipped reason=no_target_foreground');
+      await _traceToFile('capture skipped reason=no_capturable_foreground');
       return;
     }
     if (!_projectionReady) {
@@ -472,12 +525,26 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
       return;
     }
 
+    final now = DateTime.now();
+    if (now.difference(_hourStart) >= const Duration(hours: 1)) {
+      _hourStart = now;
+      _capturesThisHour = 0;
+      await _traceToFile('capture hourly window reset');
+    }
+    if (_capturesThisHour >= _maxCapturesPerHour) {
+      await _traceToFile(
+        'capture skipped reason=hourly_cap_reached cap=$_maxCapturesPerHour',
+      );
+      return;
+    }
+
     _captureInProgress = true;
     try {
       await _traceToFile('capture start pkg=$_activeTargetPackage');
       final ok = await _captureCompressSchedule();
       if (ok) {
         _projectionRetryCount = 0;
+        _capturesThisHour++;
         await _traceToFile('capture success');
       }
       await _loadLatestRiskPolicy();
@@ -639,6 +706,7 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
   }
 
   Future<void> _startMonitoring() async {
+    await _fetchLauncherPackage();
     final ok = await _ensurePermissionsForStart();
     if (!ok) {
       return;
@@ -715,19 +783,22 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     final pkg = latest.packageName!;
     final changed = pkg != _lastForegroundPackage;
     _lastForegroundPackage = pkg;
-    final isTarget = kTargetApps.contains(pkg);
+    final isLauncher = _launcherPackage != null && pkg == _launcherPackage;
+    final isCapturable = !isLauncher;
 
     if (changed) {
-      await _traceToFile('foreground package=$pkg target=$isTarget');
-      if (isTarget) {
-        await appendEventLog('Target app foreground: $pkg');
+      await _traceToFile(
+        'foreground package=$pkg launcher=$isLauncher capturable=$isCapturable',
+      );
+      if (isCapturable) {
+        await appendEventLog('Foreground app capturable: $pkg');
       }
       await _refreshLogFromDisk();
     }
 
-    if (!isTarget) {
+    if (!isCapturable) {
       _activeTargetPackage = null;
-      _stopCaptureLoop(reason: 'non_target_foreground');
+      _stopCaptureLoop(reason: 'non_capturable_foreground');
       return;
     }
 

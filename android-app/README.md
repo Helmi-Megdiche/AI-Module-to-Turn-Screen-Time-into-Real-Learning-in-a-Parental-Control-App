@@ -40,17 +40,21 @@ Output: `build/app/outputs/flutter-apk/app-debug.apk`.
 
 Use **Start monitoring** after all are granted. **Refresh status & log** reloads the shared log file under the app documents directory (`event_log.txt`).
 
-## Continuous target-session capture (Android 14+)
+## Capture strategy (battery-aware)
 
 - Monitoring polls usage every 5 seconds to detect current foreground package.
-- If a package in `kTargetApps` is foreground, a capture loop runs periodically (default 15s).
+- App captures any foreground package except the current launcher package (home screen).
+- Launcher package is detected dynamically at runtime via `device_apps`.
+- Capture loop starts only when monitoring is active, projection is ready, and foreground app is capturable.
 - Captures are serialized with an in-progress guard to prevent overlap when upload is slow.
+- Capture loop pauses when app lifecycle is `paused`/`hidden`/`detached` and resumes on `resumed` when capture conditions still hold.
+- Hourly capture budget is enforced (`120` captures/hour). Extra attempts are skipped and logged until the hour window resets.
 - Upload stays in Workmanager isolate; worker persists latest `riskScore` to `capture_policy.json`.
 - UI isolate reads `capture_policy.json` and adapts interval:
   - `riskScore > 0.8` -> 5s
   - `riskScore > 0.5` -> 10s
   - otherwise -> 20s
-- If a non-target app becomes foreground (or monitoring/projection stops), capture loop stops.
+- If launcher/non-capturable foreground becomes active (or monitoring/projection stops), capture loop stops.
 - On projection invalidation (`MediaProjection` / `VirtualDisplay` failures), app runs silent recovery retries with balanced backoff (1s, 2s, 4s). If retries fail, it requests projection consent again and resumes capture loop on success.
 - Recovery path explicitly calls plugin `resetSession()` before re-consent so stale native objects from the previous projection session are not reused.
 
