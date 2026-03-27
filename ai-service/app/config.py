@@ -75,4 +75,4 @@ VISION_MATCHED_KEYWORDS_THRESHOLD = _float_env("VISION_MATCHED_KEYWORDS_THRESHOL
 
 # OCR: drop digit-heavy tokens before moderation (reduces false positives on garbled OCR)
 ENABLE_OCR_CLEANUP = _bool_env("ENABLE_OCR_CLEANUP", True)
-OCR_DIGIT_RATIO_THRESHOLD = _float_env("OCR_DIGIT_RATIO_THRESHOLD", 0.5)
+OCR_DIGIT_RATIO_THRESHOLD = _float_env("OCR_DIGIT_RATIO_THRESHOLD", 0.4)

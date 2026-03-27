@@ -277,7 +277,7 @@ Main file: `ai-service/app/services/ocr_service.py`
 - **GPU** when `torch.cuda.is_available()` and `gpu=True` is passed to EasyOCR
 - Image **thumbnail** to `1280x1280` before OCR to bound memory and time
 - **Output:** unique words from all detections, **case-insensitive**, **first-seen order** (OCR box order, then word order within each box); duplicates skipped without reordering
-- **Digit-heavy token filter:** implemented in `ocr_text_cleanup.py`, applied from `analysis_orchestrator.py` before moderation and dialect detection. Whitespace-separated tokens where the fraction of digit characters **exceeds** `OCR_DIGIT_RATIO_THRESHOLD` (default **0.5**) are dropped (tokens are kept when `digits/len(word) <=` the threshold). This trims garbled OCR (e.g. `100k`, `m54`) that can confuse zero-shot NLI, while keeping typical Arabizi/Latin words. Disable with `ENABLE_OCR_CLEANUP=false` if needed; lower the threshold (e.g. **0.45**) to drop borderline half-digit tokens such as `80u2el`.
+- **Digit-heavy token filter:** implemented in `ocr_text_cleanup.py`, applied from `analysis_orchestrator.py` before moderation and dialect detection. A token is **kept** if it is **all digits** (e.g. long codes) or if `digits/len(word) <= OCR_DIGIT_RATIO_THRESHOLD` (default **0.4**). Otherwise it is dropped—trimming garbled OCR (e.g. `100k`, `m54`, `80u2el`) that can confuse zero-shot NLI, while keeping typical Arabizi/Latin words and pure-numeric tokens. Disable with `ENABLE_OCR_CLEANUP=false` if needed; tune via `OCR_DIGIT_RATIO_THRESHOLD`.
 - **Degraded mode:** if EasyOCR fails to construct the reader (e.g. download error), startup continues; `extract_text` returns `""` and `/ready` reports `ocr_loaded: false`; **vision + text moderation** still run on the pipeline (moderation sees empty OCR unless text arrives from other paths)
 - **French OCR:** not supported in this reader. **French (or other Latin) text** that still appears in OCR output can be passed through as tokens the moderation model may partially handle. The architecture could add **French via a second EasyOCR reader** in a future change if product needs it.
 
@@ -550,7 +550,7 @@ From `ai-service/app/config.py`:
 - `VISION_MODEL_NAME` (default `Ateeqq/nsfw-image-detection`)
 - `VISION_MATCHED_KEYWORDS_THRESHOLD` (default `0.5`)
 - `ENABLE_OCR_CLEANUP` (default `true`) — digit-ratio token filter before moderation
-- `OCR_DIGIT_RATIO_THRESHOLD` (default `0.5`) — keep token if `digits/len <=` this value
+- `OCR_DIGIT_RATIO_THRESHOLD` (default `0.4`) — keep mixed-alphanumeric token if `digits/len <=` this value; **all-digit** tokens are always kept
 
 ### 9.3 Test Runner Environment
 
