@@ -119,6 +119,7 @@ Main file: `backend/src/services/analyzeService.js`
   - returns preview mission (`status: "preview"`)
   - does not write DB rows
 - image path:
+  - **Exposure boost (CDC §4.4):** after the AI returns, the backend loads **1-hour** `getRecentExposureStats(userId, 60)`. If `exposureRate > 0.5` and the **original** `riskScore` is still below `DANGEROUS_THRESHOLD` (from `backend/src/config.js`, env `MODERATION_DANGEROUS_THRESHOLD`, default `0.85`, aligned with the Python service), mission routing uses an **adjusted** score `min(riskScore + 0.15, 0.99)` for `selectMissionType` / `generateMissionPayload`; the stored `Analysis.riskScore` remains the **unadjusted** model value. The JSON response includes `exposureBoost: boolean`.
   - transaction creates/loads user, creates `Analysis`, creates `Mission`
   - safe immediate reward respects:
     - `SAFE_POINTS_COOLDOWN_MINUTES`
@@ -193,6 +194,10 @@ Main file: `backend/src/services/userService.js`
     - `level = floor(sqrt(points / 100)) + 1`
     - `pointsToNextLevel = 100 * (baseLevel + 1)^2 - points`
   - triggers age badge awarding based on current `age`
+- `GET /api/user/:userId/exposure-summary?window=`:
+  - rolling **exposure frequency** over a time window (implementation: `backend/src/services/analyzeService.js` + Prisma `groupBy` on `Analysis.category`)
+  - query `window`: `1h`, `24h` (default), or `7d` — invalid values return `400` with `Invalid window. Use 1h, 24h, or 7d.`
+  - response: `userId`, `window`, `totalAnalyses`, `riskyCount`, `dangerousCount`, `exposureRate`, `categoryBreakdown` (counts per category), `trend` (`increasing` | `stable` | `decreasing`), `lastDangerousAt` (ISO string or `null`)
 - `GET /api/user/:id/profile`:
   - compact profile payload for demo personalization controls:
     - `id`, `age`, `points`
@@ -536,6 +541,7 @@ From `backend/.env.example`:
 - `AI_REQUEST_TIMEOUT_MS=120000`
 - `SAFE_POINTS_COOLDOWN_MINUTES=5`
 - `SAFE_POINTS_DAILY_CAP=10`
+- `MODERATION_DANGEROUS_THRESHOLD=0.85` (must match AI service; used for exposure-boost gating so already-dangerous scores are not bumped)
 
 ### 9.2 AI Environment (`ai-service` process env)
 
@@ -647,6 +653,11 @@ Tests in `backend/src/services/__tests__/` cover:
 - `badgeService` threshold and age badge awarding
 - `userService` summary fields and badge retrieval
 - `aiService` HTTP client behavior and error handling
+
+Tests in `backend/src/__tests__/` cover exposure frequency end-to-end:
+
+- `exposure.test.js` — `getRecentExposureStats`, `getExposureTrend`, exposure boost inside `runAnalyze`, trend boundaries, mission-tier effects (mocked Prisma + AI, same pattern as `services/__tests__/analyzeService.test.js`)
+- `exposureRoutes.test.js` — `GET /api/user/:userId/exposure-summary` via **supertest** and the Express app from `src/app.js`, with Prisma `groupBy` and `analyzeService` stats helpers mocked
 
 ### 11.3 AI Test Coverage
 
