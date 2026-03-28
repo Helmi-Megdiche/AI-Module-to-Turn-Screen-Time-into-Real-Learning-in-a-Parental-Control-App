@@ -4,6 +4,7 @@ const userController = require('../controllers/userController');
 
 const router = express.Router();
 
+router.get('/:userId/exposure-summary', userController.getExposureSummary);
 router.get('/:id/history', userController.getHistory);
 router.get('/:id/missions', userController.getMissions);
 router.get('/:id/badges', userController.getBadges);

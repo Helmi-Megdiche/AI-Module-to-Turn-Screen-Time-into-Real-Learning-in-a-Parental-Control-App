@@ -549,8 +549,10 @@ From `ai-service/app/config.py`:
 
 - `MODERATION_MODEL_NAME`
 - `MODERATION_HYPOTHESIS_TEMPLATE`
+- zero-shot NLI labels include **educational** pairs for CDC §4.3 (*contenu éducatif*): hypotheses *“educational content”* / *“learning material”* map to short names `educational` / `learning` (same `MODERATION_HYPOTHESIS_TEMPLATE` as other labels)
 - `MODERATION_RISKY_THRESHOLD`
 - `MODERATION_DANGEROUS_THRESHOLD`
+- `EDUCATIONAL_THRESHOLD` (default `0.55`) — confidence floor for treating educational/learning NLI signals (not a `MODERATION_*` prefix)
 - `MODERATION_MATCHED_KEYWORDS_THRESHOLD`
 - `MODERATION_SHORT_TEXT_FALLBACK_THRESHOLD`
 - `MODERATION_CACHE_SIZE`

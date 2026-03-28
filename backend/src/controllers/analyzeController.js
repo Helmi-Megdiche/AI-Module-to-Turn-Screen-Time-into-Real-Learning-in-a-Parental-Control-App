@@ -47,11 +47,12 @@ async function postAnalyze(req, res) {
       });
     }
 
-    const { analysis, mission, user } = await analyzeService.runAnalyze({
-      userId,
-      age,
-      image,
-    });
+    const { analysis, mission, user, exposureBoost } =
+      await analyzeService.runAnalyze({
+        userId,
+        age,
+        image,
+      });
 
     return res.json({
       success: true,
@@ -82,6 +83,7 @@ async function postAnalyze(req, res) {
         points: user.points,
         createdAt: user.createdAt,
       },
+      exposureBoost: exposureBoost ?? false,
     });
   } catch (err) {
     console.error(err);

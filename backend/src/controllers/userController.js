@@ -2,7 +2,12 @@
  * User endpoints: history, missions, summary, badges, profile read, interests/age updates for demo.
  * URL shape: `/api/user/:id/...` — `id` must be a positive integer (same id clients send to `/analyze`).
  */
+const prisma = require('../config/prisma');
 const userService = require('../services/userService');
+const {
+  getRecentExposureStats,
+  getExposureTrend,
+} = require('../services/analyzeService');
 const ALLOWED_INTERESTS = [
   'games',
   'reading',
@@ -299,6 +304,74 @@ async function updateInterests(req, res) {
   }
 }
 
+const EXPOSURE_WINDOW_MAP = {
+  '1h': 60,
+  '24h': 1440,
+  '7d': 10080,
+};
+
+/** `GET /api/user/:userId/exposure-summary` — rolling exposure stats + trend (fréquence d'exposition). */
+async function getExposureSummary(req, res) {
+  try {
+    const userId = parsePositiveInt(req.params.userId);
+    if (userId === null) {
+      return res.status(400).json({
+        error: 'Invalid user id (positive integer required)',
+      });
+    }
+
+    const rawWindow = req.query.window;
+    const windowKey =
+      rawWindow === undefined || rawWindow === '' ? '24h' : String(rawWindow);
+
+    const windowMinutes = EXPOSURE_WINDOW_MAP[windowKey];
+    if (windowMinutes === undefined) {
+      return res.status(400).json({
+        error: 'Invalid window. Use 1h, 24h, or 7d.',
+      });
+    }
+
+    const since = new Date(Date.now() - windowMinutes * 60 * 1000);
+
+    const [stats, trend, grouped] = await Promise.all([
+      getRecentExposureStats(userId, windowMinutes),
+      getExposureTrend(userId, windowMinutes),
+      prisma.analysis.groupBy({
+        by: ['category'],
+        where: {
+          userId,
+          createdAt: { gte: since },
+        },
+        _count: { category: true },
+      }),
+    ]);
+
+    const categoryBreakdown = {};
+    for (const row of grouped) {
+      categoryBreakdown[row.category] = row._count.category;
+    }
+
+    return res.status(200).json({
+      userId,
+      window: windowKey,
+      totalAnalyses: stats.total,
+      riskyCount: stats.riskyCount,
+      dangerousCount: stats.dangerousCount,
+      exposureRate: stats.exposureRate,
+      categoryBreakdown,
+      trend,
+      lastDangerousAt: stats.lastDangerousAt
+        ? stats.lastDangerousAt.toISOString()
+        : null,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      error: 'Failed to fetch exposure summary',
+    });
+  }
+}
+
 /** `PUT /api/user/:id/age` — set child age for personalization (and badge ranges). */
 async function updateAge(req, res) {
   try {
@@ -340,4 +413,5 @@ module.exports = {
   getProfile,
   updateInterests,
   updateAge,
+  getExposureSummary,
 };

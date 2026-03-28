@@ -15,6 +15,7 @@ const { generateMissionPayload } = require('./missionGenerators');
 const {
   SAFE_POINTS_COOLDOWN_MINUTES,
   SAFE_POINTS_DAILY_CAP,
+  DANGEROUS_THRESHOLD,
 } = require('../config');
 
 // === Analysis payload guards and normalization ===
@@ -84,6 +85,105 @@ async function resolveAnalysisPayload(image) {
   }
 
   return { ...normalizeAiResponse(raw), usedAI: true };
+}
+
+// === Exposure frequency (fréquence d'exposition) ===
+
+/**
+ * @param {number} userId
+ * @param {Date} start Inclusive lower bound on `createdAt`.
+ * @param {Date} end Upper bound on `createdAt` (inclusive if `endExclusive` is false, else exclusive).
+ * @param {{ endExclusive?: boolean }} [opts]
+ * @returns {Promise<{
+ *   total: number,
+ *   riskyCount: number,
+ *   dangerousCount: number,
+ *   exposureRate: number,
+ *   lastDangerousAt: Date | null
+ * }>}
+ */
+async function _getExposureStatsForWindow(userId, start, end, opts = {}) {
+  const endExclusive = Boolean(opts.endExclusive);
+  const createdAt = endExclusive ? { gte: start, lt: end } : { gte: start, lte: end };
+
+  const rows = await prisma.analysis.findMany({
+    where: { userId, createdAt },
+    select: { category: true },
+  });
+
+  const total = rows.length;
+  let riskyCount = 0;
+  let dangerousCount = 0;
+  for (const row of rows) {
+    if (row.category === 'risky') riskyCount += 1;
+    else if (row.category === 'dangerous') dangerousCount += 1;
+  }
+
+  const exposureRate =
+    total === 0 ? 0 : (riskyCount + dangerousCount) / total;
+
+  const lastDangerous = await prisma.analysis.findFirst({
+    where: {
+      userId,
+      createdAt,
+      category: 'dangerous',
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true },
+  });
+
+  return {
+    total,
+    riskyCount,
+    dangerousCount,
+    exposureRate,
+    lastDangerousAt: lastDangerous ? lastDangerous.createdAt : null,
+  };
+}
+
+/**
+ * Rolling-window exposure stats for a user (CDC §4.4 style signal).
+ *
+ * @param {number} userId
+ * @param {number} [windowMinutes=1440] Lookback window in minutes (e.g. 60, 1440, 10080).
+ * @returns {Promise<{
+ *   total: number,
+ *   riskyCount: number,
+ *   dangerousCount: number,
+ *   exposureRate: number,
+ *   lastDangerousAt: Date | null
+ * }>}
+ */
+async function getRecentExposureStats(userId, windowMinutes = 1440) {
+  const now = new Date();
+  const start = new Date(now.getTime() - windowMinutes * 60 * 1000);
+  return _getExposureStatsForWindow(userId, start, now, { endExclusive: false });
+}
+
+/**
+ * Compares exposure rate in the latest window vs the immediately preceding window of equal length.
+ *
+ * @param {number} userId
+ * @param {number} [windowMinutes=1440]
+ * @returns {Promise<'increasing'|'decreasing'|'stable'>}
+ */
+async function getExposureTrend(userId, windowMinutes = 1440) {
+  const now = new Date();
+  const windowMs = windowMinutes * 60 * 1000;
+  const currentStart = new Date(now.getTime() - windowMs);
+  const prevStart = new Date(now.getTime() - 2 * windowMs);
+
+  const [current, previous] = await Promise.all([
+    _getExposureStatsForWindow(userId, currentStart, now, { endExclusive: false }),
+    _getExposureStatsForWindow(userId, prevStart, currentStart, { endExclusive: true }),
+  ]);
+
+  const cur = current.exposureRate;
+  const prev = previous.exposureRate;
+
+  if (cur > prev * 1.1) return 'increasing';
+  if (cur < prev * 0.9) return 'decreasing';
+  return 'stable';
 }
 
 // === Mission generation ===
@@ -159,7 +259,13 @@ function startOfDay(date) {
 /**
  * Response shape when **no** rows are written — `analysis.id` is null, mission `status` is `preview`.
  */
-async function buildPreviewAnalyzeResult({ userId, age, analysis, mission }) {
+async function buildPreviewAnalyzeResult({
+  userId,
+  age,
+  analysis,
+  mission,
+  exposureBoost = false,
+}) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
 
   return {
@@ -191,6 +297,7 @@ async function buildPreviewAnalyzeResult({ userId, age, analysis, mission }) {
       points: 0,
       createdAt: null,
     },
+    exposureBoost,
   };
 }
 
@@ -201,7 +308,8 @@ async function buildPreviewAnalyzeResult({ userId, age, analysis, mission }) {
  * @returns {Promise<{
  *   analysis: object,
  *   mission: object,
- *   user: object
+ *   user: object,
+ *   exposureBoost: boolean
  * }>} Created DB rows (or preview-shaped objects when no image is sent).
  */
 async function runAnalyze({ userId, age, image }) {
@@ -224,8 +332,19 @@ async function runAnalyze({ userId, age, image }) {
       age,
       analysis,
       mission: { mission, points, type, game, reward, content, difficulty },
+      exposureBoost: false,
     });
   }
+
+  // Exposure boost (CDC §4.4 — fréquence d'exposition)
+  const stats = await getRecentExposureStats(userId, 60);
+  const BOOST_THRESHOLD = 0.5;
+  const BOOST_AMOUNT = 0.15;
+  const exposureBoost =
+    stats.exposureRate > BOOST_THRESHOLD && riskScore < DANGEROUS_THRESHOLD;
+  const adjustedRiskScore = exposureBoost
+    ? Math.min(riskScore + BOOST_AMOUNT, 0.99)
+    : riskScore;
 
   return prisma.$transaction(async (tx) => {
     let user = await tx.user.findUnique({ where: { id: userId } });
@@ -243,7 +362,7 @@ async function runAnalyze({ userId, age, image }) {
     }
 
     const generatedMission = generateInteractiveMission(
-      riskScore,
+      adjustedRiskScore,
       category,
       age,
       matchedKeywords,
@@ -314,8 +433,19 @@ async function runAnalyze({ userId, age, image }) {
       }
     }
 
-    return { analysis, mission: missionRecord, user: userUpdated };
+    return {
+      analysis,
+      mission: missionRecord,
+      user: userUpdated,
+      exposureBoost,
+    };
   });
 }
 
-module.exports = { runAnalyze, missionForRiskScore, generateInteractiveMission };
+module.exports = {
+  runAnalyze,
+  missionForRiskScore,
+  generateInteractiveMission,
+  getRecentExposureStats,
+  getExposureTrend,
+};

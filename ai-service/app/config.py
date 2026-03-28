@@ -58,10 +58,13 @@ ZERO_SHOT_LABELS: tuple[tuple[str, str], ...] = (
     ("harassment or bullying", "harassment"),
     ("sexual content", "sexual content"),
     ("threat or intimidation", "threat"),
+    ("educational content", "educational"),
+    ("learning material", "learning"),
 )
 
 RISKY_THRESHOLD = _float_env("MODERATION_RISKY_THRESHOLD", 0.4)
 DANGEROUS_THRESHOLD = _float_env("MODERATION_DANGEROUS_THRESHOLD", 0.85)
+EDUCATIONAL_THRESHOLD = float(os.environ.get("EDUCATIONAL_THRESHOLD", "0.55"))
 MATCHED_KEYWORDS_THRESHOLD = _float_env("MODERATION_MATCHED_KEYWORDS_THRESHOLD", 0.6)
 SHORT_TEXT_FALLBACK_THRESHOLD = _int_env("MODERATION_SHORT_TEXT_FALLBACK_THRESHOLD", 5)
 CACHE_SIZE = _int_env("MODERATION_CACHE_SIZE", 256)

@@ -1,5 +1,9 @@
 jest.mock('../../config/prisma', () => ({
   $transaction: jest.fn(),
+  analysis: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn().mockResolvedValue(null),
+  },
 }));
 
 jest.mock('../aiService', () => ({
