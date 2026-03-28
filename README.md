@@ -285,13 +285,15 @@ Main file: `ai-service/app/services/ocr_service.py`
 
 Main file: `ai-service/app/services/dialect_utils.py` (invoked from `analysis_orchestrator.py` on the OCR string **after** optional digit-ratio cleanup).
 
+- **Risk-only Latin lexicon:** `ai-service/data/tunisian_dialect.json` lists **risky** Latin/Arabizi spellings and their Arabic canonical forms (loaded once, lazily). The effective Arabic risk set is the in-code baseline **∪** all `arabic` values from that file (no benign general vocabulary in this file).
 - **Digit normalization:** Latin digits mapped to Arabic letters (single canonical table) for Arabizi-style typing.
+- **Yamli-style `PATTERN_MAP`:** multi-letter Latin fragments (e.g. `ch`→`ش`, `gh`→`غ`) are applied **only** when the token contains at least one Arabizi digit, so plain English words like `school` are not rewritten.
 - **Latin fragments:** minimal suffix/prefix replacements applied only when the token already starts with an Arabic letter after digit mapping (limits false positives on pure English).
-- **Whole-token map:** a small set of Arabizi spellings that would be wrong under the digit table alone (e.g. `9ahba` → `قحبة`) are handled explicitly.
-- **Dictionary lookup:** normalized tokens are checked against a fixed Arabic **risk lexicon**.
+- **Whole-token map:** a small set of Arabizi spellings that would be wrong under the digit table alone (e.g. `9ahba` → `قحبة`) are handled explicitly in code (also present in JSON for lookup).
+- **Detection pipeline (per token):** (1) exact lowercase match on JSON Latin keys; (2) else `normalise_word` and check against the **effective** Arabic risk set; (3) else `difflib.get_close_matches` on Latin keys (`cutoff` **0.8**) to tolerate minor OCR/Latin typos. A hit adds the **canonical Arabic** form to matches (deduped).
 - **API effect:** when a match is found, `matchedKeywords` gains `tunisian_dialect_risk` plus the canonical matched word(s), and the **text** risk score is increased by **+0.1** (capped at **1.0**) before merging with vision via `max`.
-- **Limitations:** dictionary-based, no deep semantic context; OCR errors can miss or distort tokens; tuned for demonstrator scope, not exhaustive dialect coverage.
-- **Compatibility:** does **not** alter `moderate()` or replace zero-shot logic; **augments** keyword list and text risk **only** in `analysis_orchestrator.py` via mutable copies; remains an **optional** layer in the sense that it no-ops when no lexicon match; outputs are **deterministic** for fixed OCR input.
+- **Limitations:** dictionary-based, no deep semantic context; OCR errors can miss or distort tokens; fuzzy Latin matching can rarely misfire on very short or ambiguous tokens; tuned for demonstrator scope, not exhaustive dialect coverage.
+- **Compatibility:** does **not** alter `moderate()` or replace zero-shot logic; **augments** keyword list and text risk **only** in `analysis_orchestrator.py` via mutable copies; remains an **optional** layer in the sense that it no-ops when no lexicon match; outputs are **deterministic** for fixed OCR input (given fixed JSON).
 
 ### 6.4 Text Moderation Layer
 
@@ -685,6 +687,7 @@ Tests in `ai-service/tests/` cover:
 - AI entrypoint: `ai-service/app/main.py`
 - OCR: `ai-service/app/services/ocr_service.py`
 - Tunisian/Arabizi heuristics: `ai-service/app/services/dialect_utils.py`
+- Tunisian risky Latin lexicon (JSON): `ai-service/data/tunisian_dialect.json`
 - Moderation: `ai-service/app/services/moderation_service.py`
 - Rule fallback: `ai-service/app/services/risk_scoring.py`
 - Vision moderation: `ai-service/app/services/vision_service.py`

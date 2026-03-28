@@ -1,4 +1,8 @@
-from app.services.dialect_utils import contains_risky_dialect, normalise_word
+from app.services.dialect_utils import (
+    contains_risky_dialect,
+    normalise_word,
+    risky_arabic_effective,
+)
 
 
 def test_digit_normalisation():
@@ -34,3 +38,21 @@ def test_arabizi_7mar():
 
 def test_arabizi_9ahba():
     assert normalise_word("9ahba") == "قحبة"
+
+
+def test_json_exact_latin_kalb():
+    """Latin key from tunisian_dialect.json (no Arabizi digits)."""
+    found, words = contains_risky_dialect("you kalb")
+    assert found is True
+    assert "كلب" in words
+
+
+def test_fuzzy_latin_typo():
+    """difflib recovery for minor typo vs JSON key."""
+    found, words = contains_risky_dialect("typo 3aybb here")
+    assert found is True
+    assert "عيب" in words
+
+
+def test_risky_arabic_includes_baseline():
+    assert "عيب" in risky_arabic_effective()
