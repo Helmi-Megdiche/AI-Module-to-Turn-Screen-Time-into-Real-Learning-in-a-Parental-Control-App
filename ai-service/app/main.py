@@ -4,7 +4,7 @@ FastAPI entrypoint for **screenshot → OCR → moderation → JSON** used by th
 Contract (must stay stable for ``backend/src/services/aiService.js``):
 
 - ``POST /analyze`` with JSON ``{ "image": "<base64>" }`` (raw base64 or ``data:...;base64,...``).
-- Response: ``text``, ``displayText``, ``matchedKeywords``, ``riskScore``, ``category``.
+- Response: ``text``, ``displayText``, ``matchedKeywords``, ``riskScore``, ``category``, ``educationalScore``.
 """
 
 import logging
@@ -91,6 +91,8 @@ class AnalyzeResponse(BaseModel):
     matchedKeywords: list[str]
     riskScore: float
     category: str
+    # NLI educational/learning signal max (CDC §4.3); same camelCase style as displayText/riskScore
+    educationalScore: float = 0.0
 
 
 # === API endpoints ===
@@ -140,6 +142,7 @@ async def analyze(body: AnalyzeRequest):
         matchedKeywords=result.matched_keywords,
         riskScore=result.risk_score,
         category=result.category,
+        educationalScore=result.educational_score,
     )
 
 

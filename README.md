@@ -255,9 +255,12 @@ Main file: `ai-service/app/main.py`
   "displayText": "string",
   "matchedKeywords": ["string"],
   "riskScore": 0.82,
-  "category": "safe | risky | dangerous"
+  "category": "safe | risky | dangerous | educational",
+  "educationalScore": 0.0
 }
 ```
+
+(Additive field **`educationalScore`** — max NLI score for educational/learning hypotheses before orchestrator fusion. When the Node backend skips AI for preview/no-image, treat **`educationalScore` as `0.0`**; the FastAPI service returns **400** if `image` is missing or empty, so there is no separate “neutral” JSON path here.)
 
 - `GET /health`: liveness check
 
@@ -312,11 +315,13 @@ Main file: `ai-service/app/services/moderation_service.py`
   - harassment
   - sexual content
   - threat
+  - educational / learning (CDC §4.3 *contenu éducatif* — NLI hypotheses *educational content* / *learning material*)
 - pipeline behavior:
   - multi-label zero-shot classification
   - cached results (`lru_cache`) to reduce repeated inference costs
-  - risk score = highest label score (clamped and rounded)
-  - `matchedKeywords` = labels above `MATCHED_KEYWORDS_THRESHOLD`
+  - **risk score** = max over **harm** label scores only (educational/learning excluded so homework-style text does not read as “high risk”)
+  - **educational score** = max(`educational`, `learning`) from full `label_scores` after classification — **not** derived from `matchedKeywords` (which omit sub-threshold scores and exclude educational keys by design)
+  - `matchedKeywords` = harm labels above `MATCHED_KEYWORDS_THRESHOLD`
 - fallback conditions:
   - empty OCR text
   - very short OCR text
@@ -375,7 +380,8 @@ Main file: `ai-service/app/services/analysis_orchestrator.py`
 - merges adjusted text moderation with **vision moderation**
 - final risk is `max(textRisk, visionRisk)`; final keywords are concatenated text + vision indicators
 - **Sexual-content-only safeguard:** if merged `matchedKeywords` is exactly `["sexual content"]` and the merged risk is **≥ `MODERATION_DANGEROUS_THRESHOLD`** (default **0.85**), the score is **capped at 0.6** (still **risky**, not **dangerous**) to cut false positives on noisy OCR. The keyword list is unchanged for transparency. Any extra keyword (e.g. `nsfw visual`, `tunisian_dialect_risk`, another text label) skips the cap so genuinely ambiguous or multi-signal content is unaffected.
-- category mapped from final risk using configured thresholds
+- **Educational fusion (CDC §4.3), last step before `ScreenshotAnalysisResult`:** uses `ModerationResult.educational_score` and `EDUCATIONAL_THRESHOLD` **after** the safeguard and rounding so capped risk drives threshold checks. If `educational_score` meets threshold and merged `risk_score < RISKY_THRESHOLD`, `category` becomes **`educational`** and `matchedKeywords` gains **`educational content`** if absent; if educational meets threshold but risk is **≥ `RISKY_THRESHOLD`**, **category stays risk-based** but **`educational content`** is still appended for explainability. `educational_score` is carried on the result object (HTTP field in a later step).
+- category mapped from final risk using configured thresholds, except the educational override above
 - optional log when dialect matches: `[DialectDetection] matches=[...]`
 
 ## 7) Database Schema Summary

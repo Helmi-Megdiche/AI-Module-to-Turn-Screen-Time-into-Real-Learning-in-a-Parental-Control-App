@@ -81,6 +81,40 @@ def test_moderate_mocked_risky_band(monkeypatch: pytest.MonkeyPatch) -> None:
     assert r.category == "risky"
 
 
+def test_moderate_educational_score_from_label_scores_not_matched_keywords(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Educational signal below MATCHED_KEYWORDS_THRESHOLD must still appear in educational_score."""
+
+    def fake_classify(_cleaned: str) -> tuple[tuple[str, float], ...]:
+        return tuple(sorted({"educational": 0.58, "violence": 0.2}.items()))
+
+    monkeypatch.setattr(ms, "is_classifier_ready", lambda: True)
+    monkeypatch.setattr(ms, "_classify_zero_shot_cached", fake_classify)
+
+    r = ms.moderate("some neutral long enough string here for educational path")
+    assert r.used_fallback is False
+    assert "educational" not in r.matched_keywords
+    assert r.educational_score == 0.58
+    assert r.risk_score == 0.2
+
+
+def test_moderate_high_educational_does_not_inflate_risk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Harm risk uses harm labels only; strong educational NLI does not set category to dangerous."""
+
+    def fake_classify(_cleaned: str) -> tuple[tuple[str, float], ...]:
+        return tuple(sorted({"educational": 0.92, "violence": 0.1}.items()))
+
+    monkeypatch.setattr(ms, "is_classifier_ready", lambda: True)
+    monkeypatch.setattr(ms, "_classify_zero_shot_cached", fake_classify)
+
+    r = ms.moderate("long enough string about homework and learning activities here")
+    assert r.used_fallback is False
+    assert r.risk_score == 0.1
+    assert r.educational_score == 0.92
+    assert r.category == "safe"
+
+
 def test_moderate_inference_exception_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(_cleaned: str) -> tuple[tuple[str, float], ...]:
         raise RuntimeError("pipeline exploded")

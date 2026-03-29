@@ -53,6 +53,7 @@ class ScreenshotAnalysisResult:
     matched_keywords: list[str]
     risk_score: float
     category: str
+    educational_score: float = 0.0
 
 
 def build_analyze_response_from_plain_text(
@@ -90,10 +91,25 @@ def build_analyze_response_from_plain_text(
         matched_keywords,
     )
     risk_score = round(risk_score, 2)
+    category = category_from_model_score(risk_score)
+
+    # CDC §4.3 — after safeguard so capped risk (e.g. 0.6) drives threshold checks correctly.
+    is_educational = text_mod.educational_score >= config.EDUCATIONAL_THRESHOLD
+    edu_score = float(text_mod.educational_score)
+
+    if is_educational and risk_score < config.RISKY_THRESHOLD:
+        category = "educational"
+        if "educational content" not in matched_keywords:
+            matched_keywords.append("educational content")
+    elif is_educational and risk_score >= config.RISKY_THRESHOLD:
+        if "educational content" not in matched_keywords:
+            matched_keywords.append("educational content")
+
     return ScreenshotAnalysisResult(
         text=effective,
         display_text=text_mod.display_text,
         matched_keywords=matched_keywords,
         risk_score=risk_score,
-        category=category_from_model_score(risk_score),
+        category=category,
+        educational_score=edu_score,
     )

@@ -5,7 +5,7 @@ Flow for ``moderate(text)``:
 
 1. Empty / too-short OCR → fallback (no GPU transformer call).
 2. Model unavailable at startup → degraded mode → fallback.
-3. Otherwise run NLI zero-shot labels, take **max** score as risk, threshold into ``safe``/``risky``/``dangerous``.
+3. Otherwise run NLI zero-shot labels; **risk** uses max over harm labels only (educational/learning are separate). Threshold into ``safe``/``risky``/``dangerous``.
 4. On inference errors → fallback so the API never crashes mid-request.
 
 The fallback module is ``risk_scoring`` — tuned for OCR typos (fuzzy keywords + regex).
@@ -40,6 +40,12 @@ from app.services.risk_scoring import RiskAnalysis, analyze_text as analyze_text
 
 logger = logging.getLogger(__name__)
 
+# Short names excluded from risk max / matched_keywords — CDC §4.3 educational NLI signals.
+_EDU_SHORT_LABELS: frozenset[str] = frozenset({"educational", "learning"})
+_RISK_LABEL_KEYS: frozenset[str] = frozenset(
+    short for _hyp, short in ZERO_SHOT_LABELS if short not in _EDU_SHORT_LABELS
+)
+
 _classifier: Any = None
 _startup_initialization_attempted = False
 _degraded_mode = False
@@ -58,6 +64,7 @@ class ModerationResult:
     label_scores: dict[str, float]
     inference_ms: float
     used_fallback: bool
+    educational_score: float = 0.0
     fallback_reason: str | None = None
 
 
@@ -297,6 +304,18 @@ def _label_scores_from_hf_raw(raw: dict[str, Any]) -> dict[str, float]:
     return out
 
 
+def _educational_score_from_label_scores(label_scores: dict[str, float]) -> float:
+    """
+    Max NLI score for ``educational`` / ``learning`` hypotheses (CDC §4.3).
+
+    Must use ``label_scores`` after classification — **not** ``matched_keywords`` from
+    ``_extract_scores``, which only lists risk labels above ``MATCHED_KEYWORDS_THRESHOLD``.
+    """
+    edu = float(label_scores.get("educational", 0.0))
+    learn = float(label_scores.get("learning", 0.0))
+    return round(min(1.0, max(edu, learn)), 2)
+
+
 def _cached_pairs_from_label_scores(label_scores: dict[str, float]) -> tuple[tuple[str, float], ...]:
     """
     Convert mutable dict scores into a stable tuple for caching.
@@ -336,16 +355,20 @@ def _extract_scores(label_scores: dict[str, float]) -> tuple[float, list[str]]:
     """
     Derive API-ready risk + matched labels from per-label scores.
 
+    Educational / learning labels are omitted here so ``risk_score`` and ``matched_keywords``
+    stay harm-oriented; use ``_educational_score_from_label_scores(label_scores)`` for §4.3.
+
     Args:
         label_scores: Internal label -> score mapping.
 
     Returns:
         tuple[float, list[str]]: Rounded risk score and sorted matched labels.
     """
-    risk_score = max(label_scores.values(), default=0.0)
+    risk_only = {k: v for k, v in label_scores.items() if k in _RISK_LABEL_KEYS}
+    risk_score = max(risk_only.values(), default=0.0)
     matched = [
         label
-        for label, score in sorted(label_scores.items(), key=lambda item: item[1], reverse=True)
+        for label, score in sorted(risk_only.items(), key=lambda item: item[1], reverse=True)
         if score >= MATCHED_KEYWORDS_THRESHOLD
     ]
     return round(min(1.0, risk_score), 2), matched
@@ -372,6 +395,7 @@ def _fallback_result(text: str, reason: str) -> ModerationResult:
         label_scores={},
         inference_ms=0.0,
         used_fallback=True,
+        educational_score=0.0,
         fallback_reason=reason,
     )
 
@@ -403,6 +427,7 @@ def moderate(text: str) -> ModerationResult:
         label_scores = dict(_classify_zero_shot_cached(cleaned))
         inference_ms = round((perf_counter() - t0) * 1000, 2)
         risk_score, matched = _extract_scores(label_scores)
+        educational_score = _educational_score_from_label_scores(label_scores)
         return ModerationResult(
             matched_keywords=matched,
             risk_score=risk_score,
@@ -411,6 +436,7 @@ def moderate(text: str) -> ModerationResult:
             label_scores=label_scores,
             inference_ms=inference_ms,
             used_fallback=False,
+            educational_score=educational_score,
             fallback_reason=None,
         )
     except Exception as exc:
