@@ -56,6 +56,11 @@ flowchart LR
 
 ## 4) End-to-End Functional Pipeline
 
+**CDC (cahier des charges) — one-line traceability:**
+
+- **§4.3 *contenu éducatif*:** NLI detects educational/learning text; the AI and Node stack expose **`educationalScore`**, may set **`category: educational`** when risk is low, and the backend applies **positive mission routing** for that category.
+- **§4.4 *fréquence d'exposition*:** rolling **exposure** stats over recent analyses and, on analyze, an optional **`exposureBoost`** that nudges mission routing when **1h `exposureRate` > 0.5** (see §5.2).
+
 1. Client sends `POST /api/analyze` with `{ userId, age, image? }`.
 2. If no image is provided, backend returns a safe preview (`riskScore: 0`) and does not persist analysis.
 3. If image is present, backend calls AI service `/analyze`.
@@ -66,7 +71,7 @@ flowchart LR
    - **Text risk adjustment** if dialect hits: **`tunisian_dialect_risk`** + canonical terms; **+0.1** to text risk **capped at 1.0**
    - **Fusion with vision** — `max(adjusted_text_risk, vision_risk)` and merged keywords
 5. AI result is normalized to:
-   - `text`, `displayText`, `matchedKeywords`, `riskScore`, `category`
+   - `text`, `displayText`, `matchedKeywords`, `riskScore`, `category`, **`educationalScore`** (always present; default **`0.0`** when absent from the Python payload)
 6. Backend creates `Analysis` + `Mission` (legacy text + optional structured interactive content).
 7. Mission personalization uses user profile (`interests`, `engagementScore`, `age`) with risk-aware routing.
 8. Points logic:
@@ -261,7 +266,7 @@ Main file: `ai-service/app/main.py`
 }
 ```
 
-(Additive field **`educationalScore`** — max NLI score for educational/learning hypotheses before orchestrator fusion. When the Node backend skips AI for preview/no-image, treat **`educationalScore` as `0.0`**; the FastAPI service returns **400** if `image` is missing or empty, so there is no separate “neutral” JSON path here.)
+(**`educationalScore`:** `float`, **always present** on successful `POST /analyze`, default **`0.0`**. Max NLI score for educational/learning hypotheses after orchestration rules. When the Node backend skips AI for preview/no-image, treat **`educationalScore` as `0.0`**; the FastAPI service returns **400** if `image` is missing or empty, so there is no separate “neutral” JSON path here.)
 
 - `GET /health`: liveness check
 
@@ -308,6 +313,11 @@ Main file: `ai-service/app/services/dialect_utils.py` (invoked from `analysis_or
 
 Main file: `ai-service/app/services/moderation_service.py`
 
+- **`ModerationResult`** (output of **`moderate()`**) includes, alongside **`risk_score`**, **`category`**, **`matched_keywords`**, **`label_scores`**, etc.:
+  - **`educational_score`:** `float`, max of NLI keys **`educational`** / **`learning`** in **`label_scores`** (defaults to **`0.0`** on fallbacks). This is the value forwarded as HTTP **`educationalScore`** after orchestration.
+  - **`isEducational`:** not a separate field — the orchestrator uses **`educational_score >= EDUCATIONAL_THRESHOLD`** as the boolean gate ( **`EDUCATIONAL_THRESHOLD`** env, default **`0.55`**).
+  - **`educationalLabels`:** not a separate field — educational hypotheses appear as keys **`educational`** and **`learning`** inside **`label_scores`** (scores are also fused into **`educational_score`**).
+  - **`matched_keywords`** for **risk** never lists **`educational`** / **`learning`**; only **harm** labels at or above **`MATCHED_KEYWORDS_THRESHOLD`** (`env` **`MODERATION_MATCHED_KEYWORDS_THRESHOLD`**) appear there.
 - model: `MoritzLaurer/mDeBERTa-v3-base-mnli-xnli` (zero-shot)
 - candidate moderation labels:
   - self-harm
@@ -320,6 +330,7 @@ Main file: `ai-service/app/services/moderation_service.py`
 - pipeline behavior:
   - multi-label zero-shot classification
   - cached results (`lru_cache`) to reduce repeated inference costs
+  - **`EDUCATIONAL_THRESHOLD`** (`env: **`EDUCATIONAL_THRESHOLD`**, default **`0.55`**) is read in **`analysis_orchestrator`**, not inside **`moderate()`**; it gates whether the educational signal participates in category fusion (see §6.7).
   - **risk score** = max over **harm** label scores only (educational/learning excluded so homework-style text does not read as “high risk”)
   - **educational score** = max(`educational`, `learning`) from full `label_scores` after classification — **not** derived from `matchedKeywords` (which omit sub-threshold scores and exclude educational keys by design)
   - `matchedKeywords` = harm labels above `MATCHED_KEYWORDS_THRESHOLD`
@@ -381,8 +392,11 @@ Main file: `ai-service/app/services/analysis_orchestrator.py`
 - merges adjusted text moderation with **vision moderation**
 - final risk is `max(textRisk, visionRisk)`; final keywords are concatenated text + vision indicators
 - **Sexual-content-only safeguard:** if merged `matchedKeywords` is exactly `["sexual content"]` and the merged risk is **≥ `MODERATION_DANGEROUS_THRESHOLD`** (default **0.85**), the score is **capped at 0.6** (still **risky**, not **dangerous**) to cut false positives on noisy OCR. The keyword list is unchanged for transparency. Any extra keyword (e.g. `nsfw visual`, `tunisian_dialect_risk`, another text label) skips the cap so genuinely ambiguous or multi-signal content is unaffected.
-- **Educational fusion (CDC §4.3), last step before `ScreenshotAnalysisResult`:** uses `ModerationResult.educational_score` and `EDUCATIONAL_THRESHOLD` **after** the safeguard and rounding so capped risk drives threshold checks. If `educational_score` meets threshold and merged `risk_score < RISKY_THRESHOLD`, `category` becomes **`educational`** and `matchedKeywords` gains **`educational content`** if absent; if educational meets threshold but risk is **≥ `RISKY_THRESHOLD`**, **category stays risk-based** but **`educational content`** is still appended for explainability. `educational_score` is carried on the result object (HTTP field in a later step).
-- category mapped from final risk using configured thresholds, except the educational override above
+- **Educational fusion (CDC §4.3)** runs **after** this safeguard and **after** `risk_score` rounding, so capped risk participates correctly in threshold checks.
+  - **RULE A:** if **`educational_score >= EDUCATIONAL_THRESHOLD`** and merged **`risk_score < RISKY_THRESHOLD`** → **`category = "educational"`** and **`educational content`** is appended to **`matchedKeywords`** if missing.
+  - **RULE B:** if **`educational_score >= EDUCATIONAL_THRESHOLD`** but merged **`risk_score >= RISKY_THRESHOLD`** → **risk wins** (`category` stays **safe** / **risky** / **dangerous** from the score), but **`educational content`** is still appended for explainability.
+- **`ScreenshotAnalysisResult.educational_score`** is **always** set (defaults **`0.0`**). JSON **`POST /analyze`** exposes it as **`educationalScore`** — **always present**, default **`0.0`** (see §6.1, §11.4).
+- category mapped from final risk using configured thresholds, except **RULE A** above
 - optional log when dialect matches: `[DialectDetection] matches=[...]`
 
 ## 7) Database Schema Summary
@@ -448,7 +462,9 @@ Defined in `backend/prisma/schema.prisma`.
 - `GET /health`
 - `POST /analyze`
   - body: `{ userId, age, image? }`
-  - response includes `educationalScore` (from AI NLI; default `0.0`) for Flutter / parent dashboards without extra endpoints
+  - response includes:
+    - **`educationalScore`:** `float` (from AI NLI; default **`0.0`**)
+    - **`exposureBoost`:** `boolean` — **true** when the §5.2 one-hour **`exposureRate > 0.5`** nudge was applied to mission routing (stored **`Analysis.riskScore`** stays unadjusted)
 - `GET /user/:id/history?take=20&skip=0`
 - `GET /user/:id/missions?take=100&skip=0`
 - `GET /user/:id/badges`
@@ -550,8 +566,12 @@ From `backend/.env.example`:
 - `AI_REQUEST_TIMEOUT_MS=120000`
 - `SAFE_POINTS_COOLDOWN_MINUTES=5`
 - `SAFE_POINTS_DAILY_CAP=10`
-- `MODERATION_RISKY_THRESHOLD=0.4` (must match AI service; educational `category` uses this with `riskScore` for CDC §4.3 mission routing)
-- `MODERATION_DANGEROUS_THRESHOLD=0.85` (must match AI service; used for exposure-boost gating so already-dangerous scores are not bumped)
+
+**Thresholds (F2 educational + F1 exposure boost — keep aligned with `ai-service`):**
+
+- **`EDUCATIONAL_THRESHOLD`** (default **`0.55`**, env **`EDUCATIONAL_THRESHOLD`**) — read by **`ai-service`** orchestrator (§6.7); **not** required in `backend/.env` today (backend uses AI outputs only).
+- **`MODERATION_RISKY_THRESHOLD`** (default **`0.4`**, env **`MODERATION_RISKY_THRESHOLD`**) — **backend** (`backend/src/config.js`) and **ai-service**; gates educational fusion RULE A/B and Node mission routing vs **`riskScore`**.
+- **`MODERATION_DANGEROUS_THRESHOLD`** (default **`0.85`**, env **`MODERATION_DANGEROUS_THRESHOLD`**) — **backend** and **ai-service**; dangerous band, sexual-content safeguard, and exposure-boost gating (`riskScore` must stay below this for the +0.15 nudge; §5.2).
 
 ### 9.2 AI Environment (`ai-service` process env)
 
@@ -680,6 +700,16 @@ Tests in `ai-service/tests/` cover:
 - `test_educational_detection.py` — educational label scores, thresholds, and `build_analyze_response_from_plain_text` category / `educational_score` contract
 - vision service behavior
 - shared fixtures in `conftest.py`
+
+### 11.4 Analyze response contracts (operational)
+
+Stable fields for integrators (demo, Flutter, parent app):
+
+| Surface | Field | Type | Notes |
+|--------|-------|------|--------|
+| Python **`POST /analyze`** | **`educationalScore`** | `float` | **Always present**; default **`0.0`**. |
+| Node **`POST /api/analyze`** | **`educationalScore`** | `float` | Forwarded / normalized from AI; default **`0.0`**. |
+| Node **`POST /api/analyze`** | **`exposureBoost`** | `boolean` | **4.4** exposure nudge applied to routing (§5.2). |
 
 ## 12) Operational Notes and Trade-offs
 
