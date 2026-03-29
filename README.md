@@ -204,6 +204,15 @@ Main file: `backend/src/services/userService.js`
   - rolling **exposure frequency** over a time window (implementation: `backend/src/services/analyzeService.js` + Prisma `groupBy` on `Analysis.category`)
   - query `window`: `1h`, `24h` (default), or `7d` — invalid values return `400` with `Invalid window. Use 1h, 24h, or 7d.`
   - response: `userId`, `window`, `totalAnalyses`, `riskyCount`, `dangerousCount`, `exposureRate`, `categoryBreakdown` (counts per category), `trend` (`increasing` | `stable` | `decreasing`), `lastDangerousAt` (ISO string or `null`)
+  - for a **single-call parent dashboard** (exposure + progress + missions + educational), use `GET /api/user/:userId/dashboard` instead
+- `GET /api/user/:userId/dashboard?window=`:
+  - aggregate parent dashboard: `exposure` (rolling stats + `trend` + window `categoryBreakdown`), `progress` (points, level, `completedMissions`, `badgeCount`, `engagementScore` via `dashboardService.getProgressSnapshot`), `missions` (`getMissionStats`), `educational` (`getEducationalStats`)
+  - query `window`: `1h`, `24h`, or `7d` (default **`7d`**); invalid → `400` with `Invalid window. Use 1h, 24h, or 7d.`
+  - handler: `userController.getDashboard` — combines `analyzeService` exposure helpers + Prisma `groupBy` with `dashboardService`
+- `GET /api/user/:userId/risk-series?bucket=&from=&to=`:
+  - time series of risk buckets for charts: query `bucket` `day` (default) or `hour`; `from` / `to` ISO date strings (optional — default last 7 days through now)
+  - invalid `bucket`, unparseable dates, or `from >= to` return `400` with explicit `error` messages
+  - response: `userId`, `from`, `to`, `bucket`, `series` (array from `dashboardService.bucketByDay` / `bucketByHour`, zero-filled)
 - `GET /api/user/:id/profile`:
   - compact profile payload for demo personalization controls:
     - `id`, `age`, `points`
@@ -459,12 +468,21 @@ Defined in `backend/prisma/schema.prisma`.
 
 ### 8.1 Backend API (`http://localhost:3000/api`)
 
+**Parent dashboard reads (under `/api/user/:userId/`):**
+
+| Endpoint | Query params | Response (summary) |
+|----------|--------------|-------------------|
+| `GET /api/user/:userId/dashboard` | `window`: `1h`, `24h`, or `7d` (default **`7d`**) | `exposure` (rolling stats + `trend` + `categoryBreakdown`), `progress`, **mission stats** (assignments, completions, `byType`), **educational stats** |
+| `GET /api/user/:userId/risk-series` | `from`, `to` (ISO date/time, optional; default last **7 days** through **now**); `bucket`: `day` or `hour` (default **`day`**) | **`series`**: time-bucketed points, **zero-filled** where no analyses fall in the bucket |
+
 - `GET /health`
 - `POST /analyze`
   - body: `{ userId, age, image? }`
   - response includes:
     - **`educationalScore`:** `float` (from AI NLI; default **`0.0`**)
     - **`exposureBoost`:** `boolean` — **true** when the §5.2 one-hour **`exposureRate > 0.5`** nudge was applied to mission routing (stored **`Analysis.riskScore`** stays unadjusted)
+- `GET /user/:userId/dashboard?window=7d` — aggregate exposure + progress + missions + educational stats (default window `7d`)
+- `GET /user/:userId/risk-series?bucket=day&from=&to=` — bucketed risk / category counts for charting
 - `GET /user/:id/history?take=20&skip=0`
 - `GET /user/:id/missions?take=100&skip=0`
 - `GET /user/:id/badges`
@@ -710,6 +728,8 @@ Stable fields for integrators (demo, Flutter, parent app):
 | Python **`POST /analyze`** | **`educationalScore`** | `float` | **Always present**; default **`0.0`**. |
 | Node **`POST /api/analyze`** | **`educationalScore`** | `float` | Forwarded / normalized from AI; default **`0.0`**. |
 | Node **`POST /api/analyze`** | **`exposureBoost`** | `boolean` | **4.4** exposure nudge applied to routing (§5.2). |
+| Node **`GET /api/user/:userId/dashboard`** | **`userId`**, **`window`**, **`exposure`**, **`progress`**, **`missions`**, **`educational`** | object | **`exposure`**: `totalAnalyses`, `riskyCount`, `dangerousCount`, `exposureRate`, `trend`, `categoryBreakdown`, `lastDangerousAt`. **`progress`**: `points`, `level`, `completedMissions`, `badgeCount`, `engagementScore`. **`missions`** / **`educational`**: see `dashboardService` shapes. |
+| Node **`GET /api/user/:userId/risk-series`** | **`userId`**, **`from`**, **`to`**, **`bucket`**, **`series`** | array + meta | Each **`series`** item: **`t`**, **`avgRiskScore`**, **`maxRiskScore`**, **`count`**, **`dangerousCount`**, **`educationalCount`**. Gaps zero-filled. |
 
 ## 12) Operational Notes and Trade-offs
 
@@ -737,6 +757,7 @@ Stable fields for integrators (demo, Flutter, parent app):
 - Analyze logic: `backend/src/services/analyzeService.js`
 - Mission completion: `backend/src/services/missionService.js`
 - User aggregation: `backend/src/services/userService.js`
+- `backend/src/services/dashboardService.js` — aggregation helpers: **`getMissionStats`**, **`getEducationalStats`**, **`getProgressSnapshot`**, **`bucketByDay`**, **`bucketByHour`**. Used by **`GET /api/user/:userId/dashboard`** and **`GET /api/user/:userId/risk-series`**.
 - Badge engine: `backend/src/services/badgeService.js`
 - Prisma schema/migrations/seed: `backend/prisma/`
 - AI entrypoint: `ai-service/app/main.py`

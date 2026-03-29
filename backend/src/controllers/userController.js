@@ -8,6 +8,13 @@ const {
   getRecentExposureStats,
   getExposureTrend,
 } = require('../services/analyzeService');
+const {
+  getMissionStats,
+  getEducationalStats,
+  getProgressSnapshot,
+  bucketByDay,
+  bucketByHour,
+} = require('../services/dashboardService');
 const ALLOWED_INTERESTS = [
   'games',
   'reading',
@@ -372,6 +379,146 @@ async function getExposureSummary(req, res) {
   }
 }
 
+/** `GET /api/user/:userId/dashboard` — aggregate parent dashboard (exposure, progress, missions, educational). */
+async function getDashboard(req, res) {
+  try {
+    const userId = parsePositiveInt(req.params.userId);
+    if (userId === null) {
+      return res.status(400).json({
+        error: 'Invalid user id (positive integer required)',
+      });
+    }
+
+    const rawWindow = req.query.window;
+    const windowKey =
+      rawWindow === undefined || rawWindow === '' ? '7d' : String(rawWindow);
+
+    const windowMinutes = EXPOSURE_WINDOW_MAP[windowKey];
+    if (windowMinutes === undefined) {
+      return res.status(400).json({
+        error: 'Invalid window. Use 1h, 24h, or 7d.',
+      });
+    }
+
+    const since = new Date(Date.now() - windowMinutes * 60 * 1000);
+
+    const [
+      stats,
+      trend,
+      grouped,
+      missionStats,
+      educationalStats,
+      progressSnapshot,
+    ] = await Promise.all([
+      getRecentExposureStats(userId, windowMinutes),
+      getExposureTrend(userId, windowMinutes),
+      prisma.analysis.groupBy({
+        by: ['category'],
+        where: {
+          userId,
+          createdAt: { gte: since },
+        },
+        _count: { category: true },
+      }),
+      getMissionStats(userId, since),
+      getEducationalStats(userId, since),
+      getProgressSnapshot(userId),
+    ]);
+
+    const categoryBreakdown = {};
+    for (const row of grouped) {
+      categoryBreakdown[row.category] = row._count.category;
+    }
+
+    return res.status(200).json({
+      userId,
+      window: windowKey,
+      exposure: {
+        totalAnalyses: stats.total,
+        riskyCount: stats.riskyCount,
+        dangerousCount: stats.dangerousCount,
+        exposureRate: stats.exposureRate,
+        trend,
+        categoryBreakdown,
+        lastDangerousAt: stats.lastDangerousAt,
+      },
+      progress: progressSnapshot,
+      missions: missionStats,
+      educational: educationalStats,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      error: 'Failed to fetch dashboard',
+    });
+  }
+}
+
+/** `GET /api/user/:userId/risk-series` — bucketed risk time series for charts. */
+async function getRiskSeries(req, res) {
+  try {
+    const userId = parsePositiveInt(req.params.userId);
+    if (userId === null) {
+      return res.status(400).json({
+        error: 'Invalid user id (positive integer required)',
+      });
+    }
+
+    const bucket = req.query.bucket ?? 'day';
+    if (bucket !== 'day' && bucket !== 'hour') {
+      return res.status(400).json({
+        error: 'Invalid bucket. Use day or hour.',
+      });
+    }
+
+    const fromDate = req.query.from
+      ? new Date(req.query.from)
+      : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const toDate = req.query.to ? new Date(req.query.to) : new Date();
+
+    if (Number.isNaN(fromDate.getTime())) {
+      return res.status(400).json({ error: 'Invalid from date.' });
+    }
+    if (Number.isNaN(toDate.getTime())) {
+      return res.status(400).json({ error: 'Invalid to date.' });
+    }
+    if (fromDate.getTime() >= toDate.getTime()) {
+      return res.status(400).json({ error: 'from must be before to.' });
+    }
+
+    const rows = await prisma.analysis.findMany({
+      where: {
+        userId,
+        createdAt: { gte: fromDate, lte: toDate },
+      },
+      select: {
+        createdAt: true,
+        riskScore: true,
+        category: true,
+        educationalScore: true,
+      },
+    });
+
+    const series =
+      bucket === 'hour'
+        ? bucketByHour(rows, fromDate, toDate)
+        : bucketByDay(rows, fromDate, toDate);
+
+    return res.status(200).json({
+      userId,
+      from: fromDate.toISOString(),
+      to: toDate.toISOString(),
+      bucket,
+      series,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      error: 'Failed to fetch risk series',
+    });
+  }
+}
+
 /** `PUT /api/user/:id/age` — set child age for personalization (and badge ranges). */
 async function updateAge(req, res) {
   try {
@@ -414,4 +561,6 @@ module.exports = {
   updateInterests,
   updateAge,
   getExposureSummary,
+  getDashboard,
+  getRiskSeries,
 };
