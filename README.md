@@ -644,8 +644,8 @@ node scripts/run-all-tests.js
 
 This runs:
 
-1. backend Jest suite
-2. AI pytest suite
+1. backend Jest suite (including `src/__tests__/educational.test.js` for CDC §4.3 `educationalScore` normalization and persistence)
+2. AI pytest suite (including `tests/test_educational_detection.py` for educational NLI + orchestrator fusion)
 
 Optional strict evaluation:
 
@@ -666,16 +666,18 @@ Tests in `backend/src/services/__tests__/` cover:
 - `userService` summary fields and badge retrieval
 - `aiService` HTTP client behavior and error handling
 
-Tests in `backend/src/__tests__/` cover exposure frequency end-to-end:
+Tests in `backend/src/__tests__/` cover exposure frequency and educational payloads:
 
 - `exposure.test.js` — `getRecentExposureStats`, `getExposureTrend`, exposure boost inside `runAnalyze`, trend boundaries, mission-tier effects (mocked Prisma + AI, same pattern as `services/__tests__/analyzeService.test.js`)
 - `exposureRoutes.test.js` — `GET /api/user/:userId/exposure-summary` via **supertest** and the Express app from `src/app.js`, with Prisma `groupBy` and `analyzeService` stats helpers mocked
+- `educational.test.js` — `normalizeAnalyzeResponse`, `Analysis` create payload `educationalScore`, and `selectMissionType` edge cases (educational vs risk-band routing)
 
 ### 11.3 AI Test Coverage
 
 Tests in `ai-service/tests/` cover:
 
 - moderation service behavior
+- `test_educational_detection.py` — educational label scores, thresholds, and `build_analyze_response_from_plain_text` category / `educational_score` contract
 - vision service behavior
 - shared fixtures in `conftest.py`
 
