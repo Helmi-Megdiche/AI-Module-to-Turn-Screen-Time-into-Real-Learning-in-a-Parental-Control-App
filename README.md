@@ -13,9 +13,7 @@ This system transforms passive screen time into guided real-world learning:
 - uses reward logic, parent validation, badges, and levels to drive healthy behavior
 - keeps the backend/AI contract stable for reliable integration
 
-### 1.1) Roadmap and AI capability summary
-
-Sprint-style progress and **next AI priorities** are tracked in **[ROADMAP.md](ROADMAP.md)**.
+### 1.1) AI capability summary
 
 **Delivered and validated (stable in pipeline):** **Arabic OCR + Tunisian dialect risk detection** — COMPLETED · TESTED · STABLE · INTEGRATED (`analysis_orchestrator` + `dialect_utils`).
 
@@ -52,7 +50,6 @@ flowchart LR
 - `android-app/`: Flutter Android client that monitors foreground usage stats, captures the screen (MediaProjection), compresses, and uploads `POST /api/analyze` in the background — see [`android-app/README.md`](android-app/README.md) (vendored `media_projection_creator` + patched `media_projection_screenshot` for Android 14/15, including one reused `VirtualDisplay` per session for repeated `takeCapture` and explicit native `resetSession()` for re-consent recovery; captures all foreground apps except launcher/home; overlap guard; lifecycle pause/resume for battery; hourly capture cap; balanced projection auto-recovery with re-consent fallback; risk-adaptive interval via persisted worker policy; hardened handling for `Must request permission before take capture` with a short post-consent stabilization delay; manifest `FOREGROUND_SERVICE_MEDIA_PROJECTION`; scroll-safe layout when the keyboard is open).
 - `scripts/`: cross-stack test runner (`run-all-tests.js`, `run_tests.sh`)
 - `.husky/`: pre-commit test hook
-- **[ROADMAP.md](ROADMAP.md)**: PFE sprint/feature status, AI pipeline reference, next priorities
 
 ## 4) End-to-End Functional Pipeline
 
@@ -64,7 +61,7 @@ flowchart LR
 1. Client sends `POST /api/analyze` with `{ userId, age, image? }`.
 2. If no image is provided, backend returns a safe preview (`riskScore: 0`) and does not persist analysis.
 3. If image is present, backend calls AI service `/analyze`.
-4. AI service decodes base64 image and runs the **on-device AI pipeline** (see §6 and [ROADMAP.md](ROADMAP.md)):
+4. AI service decodes base64 image and runs the **on-device AI pipeline** (see §6):
    - **OCR extraction** (EasyOCR **en / ar**; `fr` omitted — not supported together with `ar` in EasyOCR)
    - **Text moderation** (zero-shot classifier, rule fallback on failure) — core logic unchanged by dialect layer
    - **Dialect normalization + Tunisian / Arabizi keyword detection** (`dialect_utils`) — heuristic, deterministic, low-latency; optional augment only
