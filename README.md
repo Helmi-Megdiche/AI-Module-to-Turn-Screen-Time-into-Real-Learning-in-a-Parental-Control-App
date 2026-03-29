@@ -682,7 +682,7 @@ node scripts/run-all-tests.js
 
 This runs:
 
-1. backend Jest suite (including `src/__tests__/educational.test.js` for CDC §4.3 `educationalScore` normalization and persistence)
+1. backend Jest suite (**104** tests), including `src/__tests__/educational.test.js` (CDC §4.3 `educationalScore`), `dashboardService.test.js` / `dashboardRoutes.test.js` (22 tests for parent dashboard helpers and HTTP routes)
 2. AI pytest suite (including `tests/test_educational_detection.py` for educational NLI + orchestrator fusion)
 
 Optional strict evaluation:
@@ -697,6 +697,7 @@ Adds `ai-service/evaluate_moderation.py --strict` over `moderation_eval_dataset.
 
 Tests in `backend/src/services/__tests__/` cover:
 
+- `dashboardService` mission/educational aggregates, progress snapshot, and JS day/hour bucketing (mocked Prisma)
 - `analyzeService` mission mapping, reward conditions, cooldown/cap behavior
 - `missionService` completion edge cases and reward transfer
 - `missionResultService` bonus calculation, result submission, auto-completion, and points/badge updates
@@ -708,6 +709,7 @@ Tests in `backend/src/__tests__/` cover exposure frequency and educational paylo
 
 - `exposure.test.js` — `getRecentExposureStats`, `getExposureTrend`, exposure boost inside `runAnalyze`, trend boundaries, mission-tier effects (mocked Prisma + AI, same pattern as `services/__tests__/analyzeService.test.js`)
 - `exposureRoutes.test.js` — `GET /api/user/:userId/exposure-summary` via **supertest** and the Express app from `src/app.js`, with Prisma `groupBy` and `analyzeService` stats helpers mocked
+- `dashboardRoutes.test.js` — `GET /api/user/:userId/dashboard` and `GET /api/user/:userId/risk-series` (supertest; partial `dashboardService` mock so real `bucketByDay` / `bucketByHour` run on mocked `Analysis` rows)
 - `educational.test.js` — `normalizeAnalyzeResponse`, `Analysis` create payload `educationalScore`, and `selectMissionType` edge cases (educational vs risk-band routing)
 
 ### 11.3 AI Test Coverage
