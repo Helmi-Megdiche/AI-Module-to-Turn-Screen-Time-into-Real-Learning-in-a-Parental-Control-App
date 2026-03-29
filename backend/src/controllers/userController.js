@@ -27,6 +27,26 @@ const ALLOWED_INTERESTS = [
   'creativity',
 ];
 
+/** `GET /api/user/list` — demo/parent picker: all users (lightweight fields). */
+async function listUsers(req, res) {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        age: true,
+        points: true,
+        engagementScore: true,
+        completedMissions: true,
+      },
+      orderBy: { id: 'asc' },
+    });
+    return res.status(200).json({ users });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to list users' });
+  }
+}
+
 function parsePositiveInt(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
@@ -553,6 +573,7 @@ async function updateAge(req, res) {
 }
 
 module.exports = {
+  listUsers,
   getHistory,
   getMissions,
   getBadges,

@@ -6,6 +6,9 @@ jest.mock('../config/prisma', () => ({
     groupBy: jest.fn(),
     findMany: jest.fn(),
   },
+  user: {
+    findMany: jest.fn(),
+  },
 }));
 
 jest.mock('../services/analyzeService', () => ({
@@ -28,6 +31,48 @@ const app = require('../app');
 const prisma = require('../config/prisma');
 const analyzeService = require('../services/analyzeService');
 const dashboardService = require('../services/dashboardService');
+
+describe('GET /api/user/list', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('returns users array', async () => {
+    prisma.user.findMany.mockResolvedValue([
+      {
+        id: 1,
+        age: 10,
+        points: 5,
+        engagementScore: 0.5,
+        completedMissions: 2,
+      },
+    ]);
+    const res = await request(app).get('/api/user/list');
+
+    expect(res.status).toBe(200);
+    expect(res.body.users).toHaveLength(1);
+    expect(res.body.users[0]).toEqual(
+      expect.objectContaining({ id: 1, age: 10 })
+    );
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({ id: true, age: true }),
+        orderBy: { id: 'asc' },
+      })
+    );
+  });
+
+  test('findMany throws → 500', async () => {
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    prisma.user.findMany.mockRejectedValueOnce(new Error('DB down'));
+
+    const res = await request(app).get('/api/user/list');
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('Failed to list users');
+    errSpy.mockRestore();
+  });
+});
 
 describe('GET /api/user/:userId/dashboard', () => {
   const statsPayload = {

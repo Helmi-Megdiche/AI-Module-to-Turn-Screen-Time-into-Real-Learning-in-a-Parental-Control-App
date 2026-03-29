@@ -220,6 +220,43 @@
     .pill.safe { background: #1e3d2e; color: var(--accent); }
     .pill.risky { background: #3d3518; color: var(--warn); }
     .pill.dangerous { background: #3d1e22; color: var(--danger); }
+    .pill.educational { background: #1e353d; color: #7dd3fc; }
+    .dash-metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 0.75rem;
+    }
+    .dash-card {
+      background: #121a16;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 0.85rem;
+    }
+    .dash-card .lbl {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+    .dash-card .val { font-size: 1.05rem; font-weight: 700; margin-top: 0.3rem; }
+    .chart-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .chart-box h3 { font-size: 0.85rem; margin: 0 0 0.5rem; color: var(--muted); font-weight: 600; }
+    @media (max-width: 780px) { .chart-row { grid-template-columns: 1fr; } }
+    select.dash-select {
+      width: 100%;
+      max-width: 22rem;
+      padding: 0.55rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #121a16;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
     ul.history {
       list-style: none;
       padding: 0;
@@ -492,7 +529,7 @@
   <div class="wrap">
     <header>
       <h1>Parental control — jury demo</h1>
-      <p class="tagline">Analyze · missions · history · summary (calls your real API)</p>
+      <p class="tagline">Analyze · missions · history · summary · parent dashboard (calls your real API)</p>
     </header>
 
     <div class="tab-bar" role="tablist" aria-label="Demo sections">
@@ -502,6 +539,7 @@
       <button class="tab-button" type="button" data-tab="history">History</button>
       <button class="tab-button" type="button" data-tab="parent-missions">Parent: Missions</button>
       <button class="tab-button" type="button" data-tab="profile">Profile</button>
+      <button class="tab-button" type="button" data-tab="dashboard">Dashboard</button>
     </div>
 
     <section>
@@ -698,8 +736,48 @@
         <div id="profileData" style="margin-top:1rem"></div>
       </section>
     </div>
+
+    <div id="dashboard" class="tab-content">
+      <section>
+        <h2>7 · Parent dashboard</h2>
+        <p class="muted" style="margin-top:0">Aggregates from <code>GET /api/user/:id/dashboard</code> and <code>GET /api/user/:id/risk-series</code>. Pick any seeded user from the list.</p>
+        <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:1rem">
+          <div>
+            <label for="dashUserSelect">Child user</label><br />
+            <select id="dashUserSelect" class="dash-select" aria-label="Dashboard user"></select>
+          </div>
+          <div>
+            <label for="dashWindow">Time window</label><br />
+            <select id="dashWindow" class="dash-select">
+              <option value="1h">1 hour</option>
+              <option value="24h">24 hours</option>
+              <option value="7d" selected>7 days</option>
+            </select>
+          </div>
+        </div>
+        <div class="actions" style="margin-top:0.75rem">
+          <button type="button" id="btnLoadDashboard">
+            <span class="btn-label">Load dashboard</span>
+            <span class="btn-spinner" hidden aria-hidden="true"></span>
+          </button>
+        </div>
+        <div id="dashboardErr" class="err" hidden></div>
+        <div id="dashMetrics" class="dash-metrics" style="margin-top:1rem"></div>
+        <div class="chart-row">
+          <div class="chart-box">
+            <h3>Average risk over time</h3>
+            <canvas id="chartRisk" height="200" aria-label="Risk series chart"></canvas>
+          </div>
+          <div class="chart-box">
+            <h3>Analyses by category (window)</h3>
+            <canvas id="chartCategory" height="200" aria-label="Category breakdown chart"></canvas>
+          </div>
+        </div>
+      </section>
+    </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
     /**
      * Browser-side demo logic only. Expects the Express API (CORS + JSON) on apiBase.
@@ -752,7 +830,11 @@
     }
 
     document.querySelectorAll(".tab-button").forEach((btn) => {
-      btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+      btn.addEventListener("click", () => {
+        const tab = btn.dataset.tab;
+        switchTab(tab);
+        if (tab === "dashboard") refreshDashUserList();
+      });
     });
 
     // === Image upload handling ===
@@ -796,6 +878,7 @@
       "btnHistory",
       "btnLoadMissions",
       "btnLoadProfile",
+      "btnLoadDashboard",
     ];
 
     /** Toggle spinner + label on primary/secondary action buttons during fetch. */
@@ -865,8 +948,214 @@
       if (c === "safe") return '<span class="pill safe">safe</span>';
       if (c === "risky") return '<span class="pill risky">risky</span>';
       if (c === "dangerous") return '<span class="pill dangerous">dangerous</span>';
+      if (c === "educational") return '<span class="pill educational">educational</span>';
       return String(cat);
     }
+
+    /** Parent dashboard charts (Chart.js). */
+    let chartRiskInstance = null;
+    let chartCategoryInstance = null;
+
+    function destroyDashCharts() {
+      if (chartRiskInstance) {
+        chartRiskInstance.destroy();
+        chartRiskInstance = null;
+      }
+      if (chartCategoryInstance) {
+        chartCategoryInstance.destroy();
+        chartCategoryInstance = null;
+      }
+    }
+
+    function dashWindowToSeriesParams(windowKey) {
+      const to = new Date();
+      const ms = { "1h": 3600000, "24h": 86400000, "7d": 604800000 }[windowKey] || 604800000;
+      const from = new Date(to.getTime() - ms);
+      const bucket = windowKey === "7d" ? "day" : "hour";
+      return { bucket, from: from.toISOString(), to: to.toISOString() };
+    }
+
+    function dashCard(lbl, val) {
+      return (
+        '<div class="dash-card"><div class="lbl">' +
+        escapeHtml(lbl) +
+        '</div><div class="val">' +
+        val +
+        "</div></div>"
+      );
+    }
+
+    async function refreshDashUserList() {
+      const sel = $("dashUserSelect");
+      const prev = sel.value;
+      try {
+        const res = await fetch(apiBase() + "/api/user/list");
+        const data = await readJsonSafe(res);
+        if (!res.ok) throw new Error(data.error || "Failed to list users");
+        sel.innerHTML = "";
+        for (const u of data.users) {
+          const opt = document.createElement("option");
+          opt.value = String(u.id);
+          const eng =
+            typeof u.engagementScore === "number"
+              ? " eng " + (u.engagementScore * 100).toFixed(0) + "%"
+              : "";
+          opt.textContent =
+            "User " + u.id + " · age " + u.age + " · " + u.points + " pts" + eng;
+          sel.appendChild(opt);
+        }
+        if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+        else if (!sel.value && sel.options.length) sel.selectedIndex = 0;
+      } catch {
+        sel.innerHTML = "";
+        for (let i = 1; i <= 5; i++) {
+          const opt = document.createElement("option");
+          opt.value = String(i);
+          opt.textContent = "User " + i + " (fallback — API list failed)";
+          sel.appendChild(opt);
+        }
+      }
+    }
+
+    function renderDashMetrics(d) {
+      const ex = d.exposure || {};
+      const pr = d.progress || {};
+      const ms = d.missions || {};
+      const ed = d.educational || {};
+      const trend = ex.trend != null ? String(ex.trend) : "—";
+      const lastD = ex.lastDangerousAt
+        ? new Date(ex.lastDangerousAt).toLocaleString()
+        : "—";
+      $("dashMetrics").innerHTML =
+        dashCard("Window", d.window || "—") +
+        dashCard("Total analyses", ex.totalAnalyses != null ? String(ex.totalAnalyses) : "—") +
+        dashCard("Exposure rate", formatPercent(ex.exposureRate)) +
+        dashCard("Risky / dangerous", (ex.riskyCount ?? "—") + " / " + (ex.dangerousCount ?? "—")) +
+        dashCard("Trend", trend) +
+        dashCard("Last dangerous", lastD) +
+        dashCard("Points", pr.points != null ? String(pr.points) : "—") +
+        dashCard("Level", pr.level != null ? String(pr.level) : "—") +
+        dashCard("Missions done (total)", pr.completedMissions != null ? String(pr.completedMissions) : "—") +
+        dashCard("Badges", pr.badgeCount != null ? String(pr.badgeCount) : "—") +
+        dashCard("Engagement", formatPercent(pr.engagementScore)) +
+        dashCard("Assigned (window)", ms.assignedInWindow != null ? String(ms.assignedInWindow) : "—") +
+        dashCard("Completed (window)", ms.completedInWindow != null ? String(ms.completedInWindow) : "—") +
+        dashCard("Completion rate", formatPercent(ms.completionRate)) +
+        dashCard("Educational count", ed.educationalCount != null ? String(ed.educationalCount) : "—") +
+        dashCard("Avg educational score", ed.avgEducationalScore != null ? ed.avgEducationalScore.toFixed(2) : "—") +
+        dashCard("Educational share", formatPercent(ed.shareOfTotal));
+    }
+
+    async function loadDashboard() {
+      const uidSel = parseInt($("dashUserSelect").value, 10);
+      const windowKey = $("dashWindow").value;
+      if (!Number.isFinite(uidSel) || uidSel <= 0) {
+        showErr($("dashboardErr"), "Select a valid user.");
+        return;
+      }
+      showErr($("dashboardErr"), "");
+      setButtonLoading("btnLoadDashboard", true, "Loading…", "Load dashboard");
+      setActionsDisabled(true);
+      try {
+        const base = apiBase();
+        const { bucket, from, to } = dashWindowToSeriesParams(windowKey);
+        const seriesUrl =
+          base +
+          "/api/user/" +
+          uidSel +
+          "/risk-series?bucket=" +
+          encodeURIComponent(bucket) +
+          "&from=" +
+          encodeURIComponent(from) +
+          "&to=" +
+          encodeURIComponent(to);
+        const dashUrl = base + "/api/user/" + uidSel + "/dashboard?window=" + encodeURIComponent(windowKey);
+        const [dashRes, seriesRes] = await Promise.all([fetch(dashUrl), fetch(seriesUrl)]);
+        const dash = await readJsonSafe(dashRes);
+        const seriesBody = await readJsonSafe(seriesRes);
+        if (!dashRes.ok) {
+          showErr($("dashboardErr"), dash.error || dash.message || "Dashboard request failed");
+          return;
+        }
+        if (!seriesRes.ok) {
+          showErr($("dashboardErr"), (seriesBody && seriesBody.error) || "Risk-series request failed");
+          return;
+        }
+        renderDashMetrics(dash);
+        destroyDashCharts();
+        const labels = (seriesBody.series || []).map((p) => {
+          const d = new Date(p.t);
+          return bucket === "day"
+            ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+            : d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit" });
+        });
+        const riskData = (seriesBody.series || []).map((p) =>
+          typeof p.avgRiskScore === "number" ? p.avgRiskScore : 0
+        );
+        const catObj = (dash.exposure && dash.exposure.categoryBreakdown) || {};
+        const catLabels = Object.keys(catObj);
+        const catValues = catLabels.map((k) => catObj[k]);
+
+        if (typeof Chart !== "undefined") {
+          Chart.defaults.color = "#8fa89a";
+          Chart.defaults.borderColor = "#2d3d36";
+          const riskCtx = $("chartRisk").getContext("2d");
+          chartRiskInstance = new Chart(riskCtx, {
+            type: "line",
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: "Avg risk",
+                  data: riskData,
+                  borderColor: "#7dd3fc",
+                  backgroundColor: "rgba(125, 211, 252, 0.15)",
+                  tension: 0.25,
+                  fill: true,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              scales: {
+                y: { min: 0, max: 1, ticks: { callback: (v) => v } },
+              },
+              plugins: { legend: { display: false } },
+            },
+          });
+          const catCtx = $("chartCategory").getContext("2d");
+          const bg = catLabels.map((lab) => {
+            const l = lab.toLowerCase();
+            if (l === "safe") return "rgba(74, 222, 128, 0.5)";
+            if (l === "risky") return "rgba(250, 204, 21, 0.55)";
+            if (l === "dangerous") return "rgba(248, 113, 113, 0.55)";
+            if (l === "educational") return "rgba(125, 211, 252, 0.55)";
+            return "rgba(148, 163, 184, 0.45)";
+          });
+          chartCategoryInstance = new Chart(catCtx, {
+            type: "bar",
+            data: {
+              labels: catLabels,
+              datasets: [{ label: "Count", data: catValues, backgroundColor: bg }],
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { display: false } },
+              scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 } },
+              },
+            },
+          });
+        }
+      } catch (err) {
+        showErr($("dashboardErr"), err.message || String(err));
+      } finally {
+        setButtonLoading("btnLoadDashboard", false, "Loading…", "Load dashboard");
+        setActionsDisabled(false);
+      }
+    }
+
+    $("btnLoadDashboard").addEventListener("click", () => loadDashboard());
 
     // === Interactive mission widget helpers ===
 

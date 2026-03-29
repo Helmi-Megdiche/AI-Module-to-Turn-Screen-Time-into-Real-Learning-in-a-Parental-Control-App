@@ -185,6 +185,9 @@ This score is stored on `User.engagementScore` and then reused by personalizatio
 
 Main file: `backend/src/services/userService.js`
 
+- `GET /api/user/list`:
+  - returns `{ users }` for **demo / parent UI** user pickers (`id`, `age`, `points`, `engagementScore`, `completedMissions`), ordered by `id`
+  - handler: `userController.listUsers` — registered **before** `/:userId/...` in `userRoutes.js` so `list` is not parsed as an id
 - `GET /api/user/:id/history?take=&skip=`:
   - paginated analyses + missions
 - `GET /api/user/:id/missions?take=&skip=`:
@@ -468,10 +471,11 @@ Defined in `backend/prisma/schema.prisma`.
 
 ### 8.1 Backend API (`http://localhost:3000/api`)
 
-**Parent dashboard reads (under `/api/user/:userId/`):**
+**Parent dashboard reads (under `/api/user/…`):**
 
 | Endpoint | Query params | Response (summary) |
 |----------|--------------|-------------------|
+| `GET /api/user/list` | — | **`users`**: lightweight rows for picker UIs (`id`, `age`, `points`, `engagementScore`, `completedMissions`) |
 | `GET /api/user/:userId/dashboard` | `window`: `1h`, `24h`, or `7d` (default **`7d`**) | `exposure` (rolling stats + `trend` + `categoryBreakdown`), `progress`, **mission stats** (assignments, completions, `byType`), **educational stats** |
 | `GET /api/user/:userId/risk-series` | `from`, `to` (ISO date/time, optional; default last **7 days** through **now**); `bucket`: `day` or `hour` (default **`day`**) | **`series`**: time-bucketed points, **zero-filled** where no analyses fall in the bucket |
 
@@ -481,6 +485,7 @@ Defined in `backend/prisma/schema.prisma`.
   - response includes:
     - **`educationalScore`:** `float` (from AI NLI; default **`0.0`**)
     - **`exposureBoost`:** `boolean` — **true** when the §5.2 one-hour **`exposureRate > 0.5`** nudge was applied to mission routing (stored **`Analysis.riskScore`** stays unadjusted)
+- `GET /user/list` — all users (light fields) for demo pickers
 - `GET /user/:userId/dashboard?window=7d` — aggregate exposure + progress + missions + educational stats (default window `7d`)
 - `GET /user/:userId/risk-series?bucket=day&from=&to=` — bucketed risk / category counts for charting
 - `GET /user/:id/history?take=20&skip=0`
@@ -546,7 +551,14 @@ Reward display in Flutter:
   - in-widget timer from mission start to submission
   - restart button resets only the game UI/state without requiring a new analyze request
 
-### 8.1.2 Demo profile tab (interests editor)
+### 8.1.2 Demo dashboard tab (parent aggregates + charts)
+
+- file: `demo/index.html` (`Dashboard` tab)
+- loads **`GET /api/user/list`** when you open the tab (fallback options **1–5** if the API is unreachable)
+- **Load dashboard** calls **`GET /api/user/:id/dashboard?window=`** and **`GET /api/user/:id/risk-series`** with `from` / `to` aligned to the selected window (`7d` → day buckets; `1h` / `24h` → hour buckets)
+- **Chart.js** (CDN): line chart for average risk over time, bar chart for **category** counts in the window
+
+### 8.1.3 Demo profile tab (interests editor)
 
 - file: `demo/index.html` (`Profile` tab)
 - supports:
@@ -682,7 +694,7 @@ node scripts/run-all-tests.js
 
 This runs:
 
-1. backend Jest suite (**104** tests), including `src/__tests__/educational.test.js` (CDC §4.3 `educationalScore`), `dashboardService.test.js` / `dashboardRoutes.test.js` (22 tests for parent dashboard helpers and HTTP routes)
+1. backend Jest suite (**106** tests), including `src/__tests__/educational.test.js` (CDC §4.3 `educationalScore`), `dashboardService.test.js` / `dashboardRoutes.test.js` (24 tests for parent dashboard helpers, `GET /api/user/list`, and HTTP routes)
 2. AI pytest suite (including `tests/test_educational_detection.py` for educational NLI + orchestrator fusion)
 
 Optional strict evaluation:
@@ -709,7 +721,7 @@ Tests in `backend/src/__tests__/` cover exposure frequency and educational paylo
 
 - `exposure.test.js` — `getRecentExposureStats`, `getExposureTrend`, exposure boost inside `runAnalyze`, trend boundaries, mission-tier effects (mocked Prisma + AI, same pattern as `services/__tests__/analyzeService.test.js`)
 - `exposureRoutes.test.js` — `GET /api/user/:userId/exposure-summary` via **supertest** and the Express app from `src/app.js`, with Prisma `groupBy` and `analyzeService` stats helpers mocked
-- `dashboardRoutes.test.js` — `GET /api/user/:userId/dashboard` and `GET /api/user/:userId/risk-series` (supertest; partial `dashboardService` mock so real `bucketByDay` / `bucketByHour` run on mocked `Analysis` rows)
+- `dashboardRoutes.test.js` — `GET /api/user/list`, `GET /api/user/:userId/dashboard`, and `GET /api/user/:userId/risk-series` (supertest; partial `dashboardService` mock so real `bucketByDay` / `bucketByHour` run on mocked `Analysis` rows)
 - `educational.test.js` — `normalizeAnalyzeResponse`, `Analysis` create payload `educationalScore`, and `selectMissionType` edge cases (educational vs risk-band routing)
 
 ### 11.3 AI Test Coverage
