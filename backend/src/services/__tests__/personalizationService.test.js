@@ -98,6 +98,30 @@ describe('personalizationService.selectMissionType', () => {
       )
     ).toBe('real_world');
   });
+
+  test('educational category with low risk returns quiz for age <= 8', () => {
+    expect(
+      selectMissionType({ age: 8, interests: [], engagementScore: 0.8 }, 0.2, 'educational')
+    ).toBe('quiz');
+  });
+
+  test('educational category with low risk returns real_world for age 9–14', () => {
+    expect(
+      selectMissionType({ age: 10, interests: [], engagementScore: 0.8 }, 0.2, 'educational')
+    ).toBe('real_world');
+  });
+
+  test('educational category with low risk returns quiz for age > 14', () => {
+    expect(
+      selectMissionType({ age: 15, interests: [], engagementScore: 0.8 }, 0.2, 'educational')
+    ).toBe('quiz');
+  });
+
+  test('educational category uses default age 12 when missing', () => {
+    expect(
+      selectMissionType({ interests: [], engagementScore: 0.8 }, 0.2, 'educational')
+    ).toBe('real_world');
+  });
 });
 
 describe('personalizationService.computeDifficulty', () => {

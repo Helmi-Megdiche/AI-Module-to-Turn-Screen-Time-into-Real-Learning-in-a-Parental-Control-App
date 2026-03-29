@@ -47,7 +47,7 @@ async function postAnalyze(req, res) {
       });
     }
 
-    const { analysis, mission, user, exposureBoost } =
+    const { analysis, mission, user, exposureBoost, educationalScore } =
       await analyzeService.runAnalyze({
         userId,
         age,
@@ -84,6 +84,7 @@ async function postAnalyze(req, res) {
         createdAt: user.createdAt,
       },
       exposureBoost: exposureBoost ?? false,
+      educationalScore: educationalScore ?? 0.0,
     });
   } catch (err) {
     console.error(err);

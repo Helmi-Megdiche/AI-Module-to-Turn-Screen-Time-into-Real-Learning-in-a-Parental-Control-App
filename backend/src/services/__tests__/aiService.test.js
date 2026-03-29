@@ -33,7 +33,7 @@ describe('analyzeImage', () => {
         headers: { 'Content-Type': 'application/json' },
       })
     );
-    expect(out).toEqual(payload);
+    expect(out).toEqual({ ...payload, educationalScore: 0.0 });
   });
 
   test('uses AI_ANALYZE_URL and AI_REQUEST_TIMEOUT_MS when set', async () => {
@@ -43,7 +43,8 @@ describe('analyzeImage', () => {
       data: { text: '', category: 'safe', riskScore: 0 },
     });
 
-    await analyzeImage('eA==');
+    const out = await analyzeImage('eA==');
+    expect(out.educationalScore).toBe(0);
 
     expect(axios.post).toHaveBeenCalledWith(
       'http://example.test/x',

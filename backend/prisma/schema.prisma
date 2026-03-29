@@ -31,6 +31,7 @@ model Analysis {
   displayText      String?
   matchedKeywords  Json?
   riskScore        Float
+  educationalScore Float    @default(0.0)
   category         String
   usedAI           Boolean  @default(false)
   createdAt        DateTime @default(now())

@@ -2,6 +2,8 @@
  * Personalization helpers for mission-type routing and adaptive difficulty.
  */
 
+const { RISKY_THRESHOLD } = require('../config');
+
 /**
  * Normalize user interests into a lowercased unique array.
  *
@@ -22,10 +24,17 @@ function normalizeInterests(rawInterests) {
  *
  * @param {{ interests?: unknown, engagementScore?: number, age?: number }} user
  * @param {number} riskScore
- * @param {string} _category
+ * @param {string} category
  * @returns {'quiz'|'mini_game'|'puzzle'|'real_world'}
  */
-function selectMissionType(user, riskScore, _category) {
+function selectMissionType(user, riskScore, category) {
+  if (category === 'educational' && riskScore < RISKY_THRESHOLD) {
+    const age = user?.age ?? 12;
+    if (age <= 8) return 'quiz';
+    if (age <= 14) return 'real_world';
+    return 'quiz';
+  }
+
   const interests = normalizeInterests(user?.interests);
   const engagementScore = Number(user?.engagementScore ?? 0.5);
   const age = Number(user?.age ?? 0);

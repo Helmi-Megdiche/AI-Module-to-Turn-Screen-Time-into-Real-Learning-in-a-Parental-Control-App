@@ -26,6 +26,7 @@ function buildMission({ mission, points, type, game, difficulty, content, reward
 }
 
 function buildQuizMission({ riskScore, matchedKeywords, difficulty }) {
+  // Also triggered by educational content detection (CDC §4.3)
   const normalized = Array.isArray(matchedKeywords)
     ? matchedKeywords.filter((x) => typeof x === 'string').map((x) => x.toLowerCase())
     : [];
@@ -109,6 +110,7 @@ function buildMiniGameMission({ difficulty }) {
 }
 
 function buildRealWorldMission({ age, difficulty }) {
+  // Also triggered by educational content detection (CDC §4.3)
   const mission =
     age < 10
       ? 'Do 10 jumping jacks and share one thing you learned today.'

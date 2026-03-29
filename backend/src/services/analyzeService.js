@@ -24,6 +24,7 @@ const EMPTY_ANALYSIS = {
   text: '',
   riskScore: 0,
   category: 'safe',
+  educationalScore: 0.0,
 };
 
 /** True when the client sent a non-empty base64 string. */
@@ -51,12 +52,15 @@ function normalizeAiResponse(data) {
   const matchedKeywords = Array.isArray(data.matchedKeywords)
     ? data.matchedKeywords.filter((x) => typeof x === 'string')
     : [];
+  const educationalScore =
+    typeof data.educationalScore === 'number' ? data.educationalScore : 0.0;
   return {
     text,
     riskScore,
     category,
     displayText,
     matchedKeywords,
+    educationalScore,
   };
 }
 
@@ -276,6 +280,7 @@ async function buildPreviewAnalyzeResult({
       displayText: analysis.displayText,
       matchedKeywords: analysis.matchedKeywords,
       riskScore: analysis.riskScore,
+      educationalScore: analysis.educationalScore ?? 0.0,
       category: analysis.category,
       usedAI: analysis.usedAI,
       createdAt: null,
@@ -309,13 +314,21 @@ async function buildPreviewAnalyzeResult({
  *   analysis: object,
  *   mission: object,
  *   user: object,
- *   exposureBoost: boolean
+ *   exposureBoost: boolean,
+ *   educationalScore: number
  * }>} Created DB rows (or preview-shaped objects when no image is sent).
  */
 async function runAnalyze({ userId, age, image }) {
   const analysis = await resolveAnalysisPayload(image);
-  const { text, riskScore, category, usedAI, displayText, matchedKeywords } =
-    analysis;
+  const {
+    text,
+    riskScore,
+    category,
+    usedAI,
+    displayText,
+    matchedKeywords,
+    educationalScore,
+  } = analysis;
 
   if (!hasProvidedImage(image)) {
     const existingUser = await prisma.user.findUnique({ where: { id: userId } });
@@ -378,6 +391,7 @@ async function runAnalyze({ userId, age, image }) {
         displayText,
         matchedKeywords,
         riskScore,
+        educationalScore,
         category,
         usedAI,
       },
@@ -438,6 +452,7 @@ async function runAnalyze({ userId, age, image }) {
       mission: missionRecord,
       user: userUpdated,
       exposureBoost,
+      educationalScore,
     };
   });
 }

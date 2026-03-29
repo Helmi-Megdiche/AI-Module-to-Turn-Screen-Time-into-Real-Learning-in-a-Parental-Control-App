@@ -101,6 +101,7 @@ Main file: `backend/src/services/analyzeService.js`
 - validates and normalizes AI payload
 - mission generation (personalized):
   - `selectMissionType(user, riskScore, category)` uses:
+    - **Educational content (CDC §4.3):** when `category === 'educational'` and `riskScore < RISKY_THRESHOLD` (from `config`, default `0.4`), routing is **positive reinforcement** and returns early: `quiz` for ages ≤ 8, `real_world` for ages 9–14, `quiz` for older users. This bypasses risk-band rules for that path.
     - dangerous risk (`> 0.7`):
       - `games` interest -> `mini_game`
       - low engagement (`< 0.4`) -> `mini_game`
@@ -408,7 +409,8 @@ Defined in `backend/prisma/schema.prisma`.
   - OCR `text` (after optional digit-ratio cleanup when enabled)
   - parent-facing `displayText`
   - `matchedKeywords` JSON
-  - `riskScore`, `category`
+  - `riskScore`, `educationalScore` (NLI educational/learning max from AI service; default `0`)
+  - `category`
   - `usedAI` flag
 
 ### 7.3 Mission
@@ -446,6 +448,7 @@ Defined in `backend/prisma/schema.prisma`.
 - `GET /health`
 - `POST /analyze`
   - body: `{ userId, age, image? }`
+  - response includes `educationalScore` (from AI NLI; default `0.0`) for Flutter / parent dashboards without extra endpoints
 - `GET /user/:id/history?take=20&skip=0`
 - `GET /user/:id/missions?take=100&skip=0`
 - `GET /user/:id/badges`
@@ -547,6 +550,7 @@ From `backend/.env.example`:
 - `AI_REQUEST_TIMEOUT_MS=120000`
 - `SAFE_POINTS_COOLDOWN_MINUTES=5`
 - `SAFE_POINTS_DAILY_CAP=10`
+- `MODERATION_RISKY_THRESHOLD=0.4` (must match AI service; educational `category` uses this with `riskScore` for CDC §4.3 mission routing)
 - `MODERATION_DANGEROUS_THRESHOLD=0.85` (must match AI service; used for exposure-boost gating so already-dangerous scores are not bumped)
 
 ### 9.2 AI Environment (`ai-service` process env)

@@ -26,7 +26,18 @@ function getAiRequestTimeoutMs() {
 }
 
 /**
- * Sends raw Base64 (no `data:` prefix) to the AI service; returns `{ text, displayText, matchedKeywords, riskScore, category }`.
+ * Default optional FastAPI fields so older services missing `educationalScore` never break callers.
+ * @param {Record<string, unknown>} raw
+ * @returns {Record<string, unknown>}
+ */
+function normalizeAnalyzeResponse(raw) {
+  const educationalScore =
+    typeof raw.educationalScore === 'number' ? raw.educationalScore : 0.0;
+  return { ...raw, educationalScore };
+}
+
+/**
+ * Sends raw Base64 (no `data:` prefix) to the AI service; returns normalized payload including `educationalScore`.
  * @throws {Error} on network failure or non-2xx — message includes HTTP status when available.
  */
 async function analyzeImage(imageBase64) {
@@ -43,7 +54,7 @@ async function analyzeImage(imageBase64) {
       }
     );
 
-    return data;
+    return normalizeAnalyzeResponse(data);
   } catch (err) {
     if (axios.isAxiosError(err)) {
       const detail =
@@ -59,4 +70,4 @@ async function analyzeImage(imageBase64) {
   }
 }
 
-module.exports = { analyzeImage };
+module.exports = { analyzeImage, normalizeAnalyzeResponse };
