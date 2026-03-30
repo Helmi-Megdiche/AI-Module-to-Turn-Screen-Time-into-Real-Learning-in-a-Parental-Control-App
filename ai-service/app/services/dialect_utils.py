@@ -29,7 +29,7 @@ _DIALECT_JSON: Final[Path] = (
 
 _DIALECT_CACHE: dict[str, Any] | None = None
 
-FUZZY_LATIN_CUTOFF: Final[float] = 0.8
+FUZZY_LATIN_CUTOFF: Final[float] = 0.85
 
 DIGIT_MAP: dict[str, str] = {
     "2": "أ",

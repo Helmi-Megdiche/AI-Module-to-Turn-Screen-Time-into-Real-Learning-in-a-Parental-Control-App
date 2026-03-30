@@ -105,6 +105,26 @@ def build_analyze_response_from_plain_text(
         if "educational content" not in matched_keywords:
             matched_keywords.append("educational content")
 
+    # False-positive guard: when only educational signal is present, avoid escalating
+    # to risky solely from noisy moderation scores.
+    if (
+        matched_keywords == ["educational content"]
+        and category == "risky"
+        and risk_score < config.DANGEROUS_THRESHOLD
+    ):
+        risk_score = min(risk_score, round(config.RISKY_THRESHOLD - 0.01, 2))
+        category = "safe"
+
+    # Keep educational_score meaningful, but suppress the boolean flag in clearly harmful
+    # contexts so educational metrics do not over-report positives.
+    harmful_keywords = [k for k in matched_keywords if k != "educational content"]
+    if (
+        category != "educational"
+        and edu_score >= config.EDUCATIONAL_THRESHOLD
+        and len(harmful_keywords) > 0
+    ):
+        edu_score = round(config.EDUCATIONAL_THRESHOLD - 0.01, 2)
+
     return ScreenshotAnalysisResult(
         text=effective,
         display_text=text_mod.display_text,

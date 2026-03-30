@@ -122,7 +122,7 @@ Main file: `backend/src/services/analyzeService.js`
   - returns preview mission (`status: "preview"`)
   - does not write DB rows
 - image path:
-  - **Exposure boost (CDC §4.4):** after the AI returns, the backend loads **1-hour** `getRecentExposureStats(userId, 60)`. If `exposureRate > 0.5` and the **original** `riskScore` is still below `DANGEROUS_THRESHOLD` (from `backend/src/config.js`, env `MODERATION_DANGEROUS_THRESHOLD`, default `0.85`, aligned with the Python service), mission routing uses an **adjusted** score `min(riskScore + 0.15, 0.99)` for `selectMissionType` / `generateMissionPayload`; the stored `Analysis.riskScore` remains the **unadjusted** model value. The JSON response includes `exposureBoost: boolean`.
+  - **Exposure boost (CDC §4.4):** after the AI returns, the backend loads **1-hour** `getRecentExposureStats(userId, 60)`. If `exposureRate > 0.5` and the **original** `riskScore` is still below `DANGEROUS_THRESHOLD` (from `backend/src/config.js`, env `MODERATION_DANGEROUS_THRESHOLD`, default `0.95`, aligned with the Python service), mission routing uses an **adjusted** score `min(riskScore + 0.15, 0.99)` for `selectMissionType` / `generateMissionPayload`; the stored `Analysis.riskScore` remains the **unadjusted** model value. The JSON response includes `exposureBoost: boolean`.
   - transaction creates/loads user, creates `Analysis`, creates `Mission`
   - safe immediate reward respects:
     - `SAFE_POINTS_COOLDOWN_MINUTES`
@@ -400,10 +400,12 @@ Main file: `ai-service/app/services/analysis_orchestrator.py`
 - API `text` / `displayText` reflect the **post-cleanup** string used for scoring (not the raw OCR concat before filtering)
 - merges adjusted text moderation with **vision moderation**
 - final risk is `max(textRisk, visionRisk)`; final keywords are concatenated text + vision indicators
-- **Sexual-content-only safeguard:** if merged `matchedKeywords` is exactly `["sexual content"]` and the merged risk is **≥ `MODERATION_DANGEROUS_THRESHOLD`** (default **0.85**), the score is **capped at 0.6** (still **risky**, not **dangerous**) to cut false positives on noisy OCR. The keyword list is unchanged for transparency. Any extra keyword (e.g. `nsfw visual`, `tunisian_dialect_risk`, another text label) skips the cap so genuinely ambiguous or multi-signal content is unaffected.
+- **Sexual-content-only safeguard:** if merged `matchedKeywords` is exactly `["sexual content"]` and the merged risk is **≥ `MODERATION_DANGEROUS_THRESHOLD`** (default **0.95**), the score is **capped at 0.6** (still **risky**, not **dangerous**) to cut false positives on noisy OCR. The keyword list is unchanged for transparency. Any extra keyword (e.g. `nsfw visual`, `tunisian_dialect_risk`, another text label) skips the cap so genuinely ambiguous or multi-signal content is unaffected.
 - **Educational fusion (CDC §4.3)** runs **after** this safeguard and **after** `risk_score` rounding, so capped risk participates correctly in threshold checks.
   - **RULE A:** if **`educational_score >= EDUCATIONAL_THRESHOLD`** and merged **`risk_score < RISKY_THRESHOLD`** → **`category = "educational"`** and **`educational content`** is appended to **`matchedKeywords`** if missing.
   - **RULE B:** if **`educational_score >= EDUCATIONAL_THRESHOLD`** but merged **`risk_score >= RISKY_THRESHOLD`** → **risk wins** (`category` stays **safe** / **risky** / **dangerous** from the score), but **`educational content`** is still appended for explainability.
+- **Low-risk educational-only correction:** if the merged keywords are exactly `["educational content"]`, category is currently `risky`, and `risk_score < DANGEROUS_THRESHOLD`, the orchestrator de-escalates to **`safe`** and caps risk just below `RISKY_THRESHOLD`. This is a non-breaking post-processing guard for educational false positives.
+- **Educational boolean suppression in harmful contexts:** when category is not `educational`, `educational_score >= EDUCATIONAL_THRESHOLD`, and harmful keywords are present, `educational_score` is reduced to just below the threshold to avoid over-reporting educational positives in clearly harmful cases.
 - **`ScreenshotAnalysisResult.educational_score`** is **always** set (defaults **`0.0`**). JSON **`POST /analyze`** exposes it as **`educationalScore`** — **always present**, default **`0.0`** (see §6.1, §11.4).
 - category mapped from final risk using configured thresholds, except **RULE A** above
 - optional log when dialect matches: `[DialectDetection] matches=[...]`
@@ -598,7 +600,7 @@ From `backend/.env.example`:
 
 - **`EDUCATIONAL_THRESHOLD`** (default **`0.55`**, env **`EDUCATIONAL_THRESHOLD`**) — read by **`ai-service`** orchestrator (§6.7); **not** required in `backend/.env` today (backend uses AI outputs only).
 - **`MODERATION_RISKY_THRESHOLD`** (default **`0.4`**, env **`MODERATION_RISKY_THRESHOLD`**) — **backend** (`backend/src/config.js`) and **ai-service**; gates educational fusion RULE A/B and Node mission routing vs **`riskScore`**.
-- **`MODERATION_DANGEROUS_THRESHOLD`** (default **`0.85`**, env **`MODERATION_DANGEROUS_THRESHOLD`**) — **backend** and **ai-service**; dangerous band, sexual-content safeguard, and exposure-boost gating (`riskScore` must stay below this for the +0.15 nudge; §5.2).
+- **`MODERATION_DANGEROUS_THRESHOLD`** (default **`0.95`**, env **`MODERATION_DANGEROUS_THRESHOLD`**) — **backend** and **ai-service**; dangerous band, sexual-content safeguard, and exposure-boost gating (`riskScore` must stay below this for the +0.15 nudge; §5.2).
 
 ### 9.2 AI Environment (`ai-service` process env)
 
