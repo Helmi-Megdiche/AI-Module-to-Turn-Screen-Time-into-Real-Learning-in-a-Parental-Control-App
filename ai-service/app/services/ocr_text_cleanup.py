@@ -3,15 +3,18 @@
 
 def should_keep_token(word: str) -> bool:
     """
-    Keep token unless it is short (≤5 chars) and contains digits but is not pure digits.
+    Drop **short** tokens that look like OCR junk: **two or more** digit characters in a
+    mixed alphanumeric word (e.g. ``5dhit5``, ``80u2el``).
 
-    This removes noisy OCR tokens like ``5dhit5`` while preserving dialect words like ``3ayb``.
+    **Single-digit** Arabizi spellings (``3``→ع, ``9``→ق, etc.) are preserved: ``3ayb``,
+    ``9ahba``, ``7mar`` stay.
     """
-    if len(word) > 5:
+    if len(word) > 6:
         return True
     if word.isdigit():
         return True
-    if any(c.isdigit() for c in word):
+    digit_count = sum(1 for c in word if c.isdigit())
+    if digit_count >= 2:
         return False
     return True
 

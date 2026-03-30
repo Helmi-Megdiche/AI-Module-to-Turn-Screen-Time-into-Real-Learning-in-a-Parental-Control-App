@@ -30,9 +30,12 @@ def test_clean_ocr_drops_half_digit_mixed_at_default_threshold():
     assert out == "x y"
 
 
-def test_should_keep_token_drops_short_digit_mixed():
+def test_should_keep_token_drops_multi_digit_mixed_short_tokens():
     assert should_keep_token("5dhit5") is False
     assert should_keep_token("80u2el") is False
+    assert should_keep_token("a1b2") is False
     assert should_keep_token("3ayb") is True
+    assert should_keep_token("9ahba") is True
+    assert should_keep_token("7mar") is True
     assert should_keep_token("12345") is True
     assert should_keep_token("longer80mix") is True
