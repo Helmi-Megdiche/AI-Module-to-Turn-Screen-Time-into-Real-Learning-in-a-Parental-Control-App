@@ -7,6 +7,7 @@ The benchmark is intentionally isolated from production code and API routes.
 ## Structure
 
 - `datasets/benchmark_v1.json`: curated benchmark samples
+- `datasets/hard_cases_v1.json`: stress cases (Arabizi, mixed language, OCR-noise tokens, punctuation, borderline educational)
 - `scripts/compute_metrics.py`: metric helpers (accuracy, range checks, PR/F1, confusion matrix)
 - `scripts/run_benchmark.py`: benchmark runner and markdown report generator
 - `reports/baseline_v1.md`: generated report artifact
@@ -31,7 +32,25 @@ It generates:
 
 `evaluation/reports/baseline_v1.md`
 
-Optional:
+### Hard cases (`--hard`)
+
+The hard-cases dataset targets challenging inputs: Arabizi variants (including mixed case), mixed Arabic/English lines, OCR-style noise tokens, punctuation-heavy forms, borderline educational phrasing, and representative Arabic safe/risky/dangerous/educational lines. Dialect-triggered rows include `tunisian_dialect_risk` in `expectedLabels` where applicable; educational rows use the keyword label `educational content` to match the text pipeline.
+
+From `ai-service/`:
+
+```bash
+python evaluation/scripts/run_benchmark.py --hard
+```
+
+This loads `evaluation/datasets/hard_cases_v1.json` and writes `evaluation/reports/baseline_hard_v1.md` by default. Use the report as a robustness baseline: lower scores here indicate where multilingual and noisy-input behavior should improve over time.
+
+You can override the report filename in either mode:
+
+```bash
+python evaluation/scripts/run_benchmark.py --hard --report-name my_hard_run.md
+```
+
+Optional (default benchmark):
 
 ```bash
 python evaluation/scripts/run_benchmark.py --report-name baseline_v2.md --changes-note "- tuned thresholds ..."

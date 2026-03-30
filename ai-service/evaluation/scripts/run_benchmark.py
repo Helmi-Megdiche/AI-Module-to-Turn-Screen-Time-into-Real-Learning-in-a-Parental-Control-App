@@ -24,12 +24,10 @@ from evaluation.scripts.compute_metrics import (
 
 
 ROOT = Path(__file__).parent.parent
-DATASET_PATH = ROOT / "datasets" / "benchmark_v1.json"
-DEFAULT_REPORT_PATH = ROOT / "reports" / "baseline_v1.md"
 
 
-def load_dataset() -> list[dict[str, Any]]:
-    with DATASET_PATH.open("r", encoding="utf-8") as f:
+def load_dataset(dataset_path: Path) -> list[dict[str, Any]]:
+    with dataset_path.open("r", encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, list):
         raise ValueError("Dataset must be a JSON array")
@@ -59,9 +57,14 @@ def _bool_eval(
 def run() -> int:
     parser = argparse.ArgumentParser(description="Run AI benchmark and generate markdown report.")
     parser.add_argument(
+        "--hard",
+        action="store_true",
+        help="Use datasets/hard_cases_v1.json and default report baseline_hard_v1.md.",
+    )
+    parser.add_argument(
         "--report-name",
-        default="baseline_v1.md",
-        help="Output report filename inside evaluation/reports/",
+        default=None,
+        help="Output report filename inside evaluation/reports/ (overrides mode default).",
     )
     parser.add_argument(
         "--changes-note",
@@ -70,8 +73,16 @@ def run() -> int:
     )
     args = parser.parse_args()
 
-    report_path = ROOT / "reports" / args.report_name
-    rows = load_dataset()
+    if args.hard:
+        dataset_path = ROOT / "datasets" / "hard_cases_v1.json"
+        default_report_name = "baseline_hard_v1.md"
+    else:
+        dataset_path = ROOT / "datasets" / "benchmark_v1.json"
+        default_report_name = "baseline_v1.md"
+
+    report_name = args.report_name if args.report_name is not None else default_report_name
+    report_path = ROOT / "reports" / report_name
+    rows = load_dataset(dataset_path)
 
     per_row: list[dict[str, Any]] = []
     all_actual_cats: list[str] = []
@@ -166,12 +177,12 @@ def run() -> int:
     failures = failures[: max(5, min(10, len(failures)))] if failures else []
 
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    report_label = Path(args.report_name).stem.replace("_", " ")
+    report_label = Path(report_name).stem.replace("_", " ")
     report: list[str] = []
     report.append(f"# AI Benchmark Report ({report_label})")
     report.append("")
     report.append(f"- Run timestamp: **{ts}**")
-    report.append(f"- Dataset: `{DATASET_PATH.as_posix()}`")
+    report.append(f"- Dataset: `{dataset_path.as_posix()}`")
     report.append(f"- Total samples: **{len(per_row)}**")
     report.append("- Mode: `build_analyze_response_from_plain_text(text, image=None)`")
     report.append("- Thresholds:")
