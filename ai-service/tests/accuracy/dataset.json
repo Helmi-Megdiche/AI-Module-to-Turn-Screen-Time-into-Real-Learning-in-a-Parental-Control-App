@@ -1,0 +1,98 @@
+[
+  {
+    "id": "en_safe_1",
+    "type": "text",
+    "language": "EN",
+    "input": "the weather is nice today",
+    "expected_category": "safe",
+    "expected_risk_max": 0.35
+  },
+  {
+    "id": "en_risk_1",
+    "type": "text",
+    "language": "EN",
+    "input": "send private photo",
+    "expected_category": "risky",
+    "expected_risk_min": 0.25
+  },
+  {
+    "id": "en_edu_1",
+    "type": "text",
+    "language": "EN",
+    "input": "solve this math exercise step by step",
+    "expected_category": "educational",
+    "expected_risk_max": 0.35
+  },
+  {
+    "id": "fr_safe_1",
+    "type": "text",
+    "language": "FR",
+    "input": "bonjour comment allez vous",
+    "expected_category": "safe",
+    "expected_risk_max": 0.35
+  },
+  {
+    "id": "fr_risk_1",
+    "type": "text",
+    "language": "FR",
+    "input": "envoyer une photo intime",
+    "expected_category": "risky",
+    "expected_risk_min": 0.25
+  },
+  {
+    "id": "fr_mixed_1",
+    "type": "text",
+    "language": "FR",
+    "input": "envoie un message private",
+    "expected_category": "risky",
+    "expected_risk_min": 0.25
+  },
+  {
+    "id": "ar_safe_1",
+    "type": "text",
+    "language": "AR",
+    "input": "الطقس جميل اليوم",
+    "expected_category": "safe",
+    "expected_risk_max": 0.45
+  },
+  {
+    "id": "ar_risk_1",
+    "type": "text",
+    "language": "AR",
+    "input": "أرسل صورة خاصة",
+    "expected_category": "risky",
+    "expected_risk_min": 0.25
+  },
+  {
+    "id": "mixed_1",
+    "type": "text",
+    "language": "mixed",
+    "input": "send صورة private",
+    "expected_category": "risky",
+    "expected_risk_min": 0.25
+  },
+  {
+    "id": "arabizi_1",
+    "type": "text",
+    "language": "mixed",
+    "input": "3ayb tkalm chwaya",
+    "expected_category": "risky",
+    "expected_risk_min": 0.25
+  },
+  {
+    "id": "en_safe_2",
+    "type": "text",
+    "language": "EN",
+    "input": "history homework chapter three",
+    "expected_category": "educational",
+    "expected_risk_max": 0.4
+  },
+  {
+    "id": "fr_edu_1",
+    "type": "text",
+    "language": "FR",
+    "input": "resoudre cette equation du second degre",
+    "expected_category": "educational",
+    "expected_risk_max": 0.4
+  }
+]

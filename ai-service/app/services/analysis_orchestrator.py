@@ -79,7 +79,7 @@ def build_analyze_response_from_plain_text(
     if dialect_risk:
         logger.info("[DialectDetection] matches=%s", dialect_matches)
         text_keywords.extend(["tunisian_dialect_risk"] + dialect_matches)
-        text_risk = min(1.0, text_risk + 0.2)
+        text_risk = min(1.0, text_risk + 0.3)
 
     vision_mod = vision_service.classify_image(image) if image is not None else {
         "riskScore": 0.0,

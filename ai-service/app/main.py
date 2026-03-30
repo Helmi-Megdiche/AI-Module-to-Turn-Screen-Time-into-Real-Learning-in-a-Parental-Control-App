@@ -58,7 +58,7 @@ def startup_event() -> None:
         reader = ocr_service.get_reader()
         ocr_ready = reader is not None
         if ocr_ready:
-            logger.info("EasyOCR reader ready")
+            logger.info("EasyOCR Latin reader ready (en+fr)")
         else:
             logger.warning("EasyOCR unavailable; service continues with OCR degraded (empty text from OCR path).")
     except Exception as e:

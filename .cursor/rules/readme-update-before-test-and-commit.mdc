@@ -1,0 +1,10 @@
+---
+description: Keep README synced before testing and commits
+alwaysApply: true
+---
+
+# README Update Before Test and Commit
+
+- Before running any test command, update `README.md` to include all newly implemented features and technical changes.
+- Before creating any git commit, update `README.md` so it reflects the current implementation.
+- Do not run tests or commit until `README.md` has been synchronized with the latest code changes.

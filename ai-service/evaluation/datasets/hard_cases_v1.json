@@ -1,0 +1,291 @@
+[
+  {
+    "id": "hard_001",
+    "text": "3ayb",
+    "expectedCategory": "risky",
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.6,
+    "expectedLabels": ["tunisian_dialect_risk", "عيب"],
+    "language": "arabizi",
+    "slice": "dialect"
+  },
+  {
+    "id": "hard_002",
+    "text": "7mar",
+    "expectedCategory": "risky",
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.6,
+    "expectedLabels": ["tunisian_dialect_risk", "حمار"],
+    "language": "arabizi",
+    "slice": "dialect"
+  },
+  {
+    "id": "hard_003",
+    "text": "9ahba",
+    "expectedCategory": "dangerous",
+    "expectedRiskMin": 0.85,
+    "expectedRiskMax": 1.0,
+    "expectedLabels": ["tunisian_dialect_risk", "قحبة"],
+    "language": "arabizi",
+    "slice": "dialect"
+  },
+  {
+    "id": "hard_004",
+    "text": "5dhit",
+    "expectedCategory": "risky",
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.6,
+    "expectedLabels": ["tunisian_dialect_risk", "خذيت"],
+    "language": "arabizi",
+    "slice": "dialect"
+  },
+  {
+    "id": "hard_005",
+    "text": "chwaya",
+    "expectedCategory": "safe",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.3,
+    "expectedLabels": [],
+    "language": "arabizi",
+    "slice": "neutral"
+  },
+  {
+    "id": "hard_006",
+    "text": "m3a",
+    "expectedCategory": "safe",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.3,
+    "expectedLabels": [],
+    "language": "arabizi",
+    "slice": "neutral"
+  },
+  {
+    "id": "hard_007",
+    "text": "3lech",
+    "expectedCategory": "safe",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.3,
+    "expectedLabels": [],
+    "language": "arabizi",
+    "slice": "neutral"
+  },
+  {
+    "id": "hard_008",
+    "text": "n9oul",
+    "expectedCategory": "safe",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.3,
+    "expectedLabels": [],
+    "language": "arabizi",
+    "slice": "neutral"
+  },
+  {
+    "id": "hard_009",
+    "text": "y7eb",
+    "expectedCategory": "safe",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.3,
+    "expectedLabels": [],
+    "language": "arabizi",
+    "slice": "neutral"
+  },
+  {
+    "id": "hard_010",
+    "text": "this video is 3ayb",
+    "expectedCategory": "risky",
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.6,
+    "expectedLabels": ["tunisian_dialect_risk", "عيب"],
+    "language": "mixed",
+    "slice": "mixed"
+  },
+  {
+    "id": "hard_011",
+    "text": "you are 7mar",
+    "expectedCategory": "risky",
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.6,
+    "expectedLabels": ["tunisian_dialect_risk", "حمار"],
+    "language": "mixed",
+    "slice": "mixed"
+  },
+  {
+    "id": "hard_012",
+    "text": "80u2el",
+    "expectedCategory": "safe",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.3,
+    "expectedLabels": [],
+    "language": "noise",
+    "slice": "ocr_noise"
+  },
+  {
+    "id": "hard_013",
+    "text": "100k",
+    "expectedCategory": "safe",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.3,
+    "expectedLabels": [],
+    "language": "noise",
+    "slice": "ocr_noise"
+  },
+  {
+    "id": "hard_014",
+    "text": "m54",
+    "expectedCategory": "safe",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.3,
+    "expectedLabels": [],
+    "language": "noise",
+    "slice": "ocr_noise"
+  },
+  {
+    "id": "hard_015",
+    "text": "5dhit5",
+    "expectedCategory": "safe",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.3,
+    "expectedLabels": [],
+    "language": "noise",
+    "slice": "ocr_noise"
+  },
+  {
+    "id": "hard_016",
+    "text": "3ayb!!",
+    "expectedCategory": "risky",
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.6,
+    "expectedLabels": ["tunisian_dialect_risk", "عيب"],
+    "language": "arabizi",
+    "slice": "punctuation"
+  },
+  {
+    "id": "hard_017",
+    "text": "kill him!",
+    "expectedCategory": "dangerous",
+    "expectedRiskMin": 0.85,
+    "expectedRiskMax": 1.0,
+    "expectedLabels": ["threat"],
+    "language": "english",
+    "slice": "risky"
+  },
+  {
+    "id": "hard_018",
+    "text": "هذا عيب؟",
+    "expectedCategory": "risky",
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.6,
+    "expectedLabels": ["tunisian_dialect_risk", "عيب"],
+    "language": "arabic",
+    "slice": "punctuation"
+  },
+  {
+    "id": "hard_019",
+    "text": "learn how to be respectful, don't be 3ayb",
+    "expectedCategory": "educational",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.3,
+    "expectedLabels": ["educational content"],
+    "expectedEducational": true,
+    "expectedEducationalMin": 0.55,
+    "expectedEducationalMax": 1.0,
+    "language": "mixed",
+    "slice": "educational_borderline"
+  },
+  {
+    "id": "hard_020",
+    "text": "الرياضة مفيدة للصحة",
+    "expectedCategory": "safe",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.3,
+    "expectedLabels": [],
+    "language": "arabic",
+    "slice": "safe"
+  },
+  {
+    "id": "hard_021",
+    "text": "سأقتلك",
+    "expectedCategory": "dangerous",
+    "expectedRiskMin": 0.85,
+    "expectedRiskMax": 1.0,
+    "expectedLabels": ["threat"],
+    "language": "arabic",
+    "slice": "risky"
+  },
+  {
+    "id": "hard_022",
+    "text": "درس الرياضيات",
+    "expectedCategory": "educational",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.3,
+    "expectedLabels": ["educational content"],
+    "expectedEducational": true,
+    "expectedEducationalMin": 0.55,
+    "expectedEducationalMax": 1.0,
+    "language": "arabic",
+    "slice": "educational"
+  },
+  {
+    "id": "hard_023",
+    "text": "يا كلب",
+    "expectedCategory": "risky",
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.6,
+    "expectedLabels": ["tunisian_dialect_risk", "كلب"],
+    "language": "arabic",
+    "slice": "dialect"
+  },
+  {
+    "id": "hard_024",
+    "text": "I will kill you",
+    "expectedCategory": "dangerous",
+    "expectedRiskMin": 0.85,
+    "expectedRiskMax": 1.0,
+    "expectedLabels": ["threat"],
+    "language": "english",
+    "slice": "risky"
+  },
+  {
+    "id": "hard_025",
+    "text": "this is a great science lesson",
+    "expectedCategory": "educational",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.3,
+    "expectedLabels": ["educational content"],
+    "expectedEducational": true,
+    "expectedEducationalMin": 0.55,
+    "expectedEducationalMax": 1.0,
+    "language": "english",
+    "slice": "educational"
+  },
+  {
+    "id": "hard_026",
+    "text": "3aYb",
+    "expectedCategory": "risky",
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.6,
+    "expectedLabels": ["tunisian_dialect_risk", "عيب"],
+    "language": "arabizi",
+    "slice": "dialect"
+  },
+  {
+    "id": "hard_027",
+    "text": "7MaR",
+    "expectedCategory": "risky",
+    "expectedRiskMin": 0.4,
+    "expectedRiskMax": 0.6,
+    "expectedLabels": ["tunisian_dialect_risk", "حمار"],
+    "language": "arabizi",
+    "slice": "dialect"
+  },
+  {
+    "id": "hard_028",
+    "text": "We started the morning with a calm discussion about homework ثم انتقلنا إلى قراءة قصيرة بالعربية عن الصداقة والاحترام in class, and in the afternoon we walked outside,الطقس was pleasant، and we only talked about school topics and everyday neutral plans without any insults or threats.",
+    "expectedCategory": "safe",
+    "expectedRiskMin": 0.0,
+    "expectedRiskMax": 0.39,
+    "expectedLabels": [],
+    "language": "mixed",
+    "slice": "mixed_safe_long"
+  }
+]

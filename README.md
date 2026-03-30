@@ -19,8 +19,8 @@ This system transforms passive screen time into guided real-world learning:
 
 **AI module capabilities today:**
 
-- **OCR languages (EasyOCR):** **English + Arabic** in one reader (`fr` cannot be combined with `ar` in the same `lang_list` per EasyOCR). French on-screen text may still appear as Latin where the detector generalizes.
-- **Dialect-aware moderation (heuristic):** Arabizi-style normalization; digit-to-letter mapping (e.g. **3→ع**, **7→ح**); Tunisian risky-token dictionary; where Arabizi typing uses **9** for **ق** in fixed expressions (e.g. **قحبة**), **whole-token normalization** in `dialect_utils` applies; keyword flag **`tunisian_dialect_risk`**; **+0.2** text risk bump **bounded to 1.0**; then **fusion with vision** via `max`.
+- **OCR languages (EasyOCR):** **adaptive dual readers** — **Latin** `en`+`fr` first, then **Arabic** `ar` only when Latin mean confidence is below **0.55** or **Arabizi hints** (`3`,`5`,`7`,`9`,`2`) appear in the Latin output — avoids triple-lang cost on every request while covering French and Arabic script.
+- **Dialect-aware moderation (heuristic):** Arabizi-style normalization; digit-to-letter mapping (e.g. **3→ع**, **7→ح**); Tunisian risky-token dictionary; where Arabizi typing uses **9** for **ق** in fixed expressions (e.g. **قحبة**), **whole-token normalization** in `dialect_utils` applies; keyword flag **`tunisian_dialect_risk`**; **+0.3** text risk bump **bounded to 1.0**; then **fusion with vision** via `max`.
 - **Risk scoring:** text (moderation + optional dialect bump) + vision; **keyword explainability** in API payloads; downstream **missions / gamification** driven by backend rules from `riskScore` / `category`.
 
 **Dialect layer constraints:** does **not** change `moderate()` or internal moderation logic; **only augments** copied keyword list and text risk before vision fusion; **deterministic**, **fast**, compatible with **frozen** `ModerationResult`.
@@ -62,10 +62,10 @@ flowchart LR
 2. If no image is provided, backend returns a safe preview (`riskScore: 0`) and does not persist analysis.
 3. If image is present, backend calls AI service `/analyze`.
 4. AI service decodes base64 image and runs the **on-device AI pipeline** (see §6):
-   - **OCR extraction** (EasyOCR **en / ar**; `fr` omitted — not supported together with `ar` in EasyOCR)
+   - **OCR extraction** (EasyOCR **Latin en+fr** first, **Arabic** reader on fallback — not `en+fr+ar` in one reader per EasyOCR limits)
    - **Text moderation** (zero-shot classifier, rule fallback on failure) — core logic unchanged by dialect layer
    - **Dialect normalization + Tunisian / Arabizi keyword detection** (`dialect_utils`) — heuristic, deterministic, low-latency; optional augment only
-   - **Text risk adjustment** if dialect hits: **`tunisian_dialect_risk`** + canonical terms; **+0.2** to text risk **capped at 1.0**
+   - **Text risk adjustment** if dialect hits: **`tunisian_dialect_risk`** + canonical terms; **+0.3** to text risk **capped at 1.0**
    - **Fusion with vision** — `max(adjusted_text_risk, vision_risk)` and merged keywords
 5. AI result is normalized to:
    - `text`, `displayText`, `matchedKeywords`, `riskScore`, `category`, **`educationalScore`** (always present; default **`0.0`** when absent from the Python payload)
@@ -253,7 +253,7 @@ Main file: `backend/src/services/badgeService.js`
 
 ## 6) AI Service (FastAPI / EasyOCR / Transformers)
 
-**Internal text pipeline (ordered):** screenshot / base64 image → **OCR** (`ocr_service.py`, en/ar) → **optional OCR cleanup** (`ocr_text_cleanup.py`): digit-ratio filtering, then **`should_keep_token`** (drop short tokens with **≥2** digit characters unless the token is all digits; keeps **single-digit** Arabizi such as `3ayb` / `9ahba`) → **text moderation** (`moderation_service.py`) → **dialect normalization + keyword detection** (`dialect_utils.py`) on the **same filtered string** → bounded **+0.2** text-risk augment when matched → **vision** (`vision_service.py`) → **max** fusion and category (`analysis_orchestrator.py`). Dialect is **heuristic**, **deterministic**, and **fast**; it does not mutate frozen moderation outputs—only **post-process copies** in the orchestrator.
+**Internal text pipeline (ordered):** screenshot / base64 image → **OCR** (`ocr_service.py`, adaptive **en+fr** then optional **ar**) → **optional OCR cleanup** (`ocr_text_cleanup.py`): digit-ratio filtering, then **`should_keep_token`** (drop short tokens with **≥2** digit characters unless the token is all digits; keeps **single-digit** Arabizi such as `3ayb` / `9ahba`) → **text moderation** (`moderation_service.py`) → **dialect normalization + keyword detection** (`dialect_utils.py`) on the **same filtered string** → bounded **+0.3** text-risk augment when matched → **vision** (`vision_service.py`) → **max** fusion and category (`analysis_orchestrator.py`). Dialect is **heuristic**, **deterministic**, and **fast**; it does not mutate frozen moderation outputs—only **post-process copies** in the orchestrator.
 
 ### 6.1 Entrypoint and API Contract
 
@@ -285,7 +285,7 @@ At startup (`@app.on_event("startup")`):
 
 - logs torch and CUDA availability
 - attempts CUDA warmup
-- preloads EasyOCR reader (best-effort)
+- preloads EasyOCR **Latin** reader `en+fr` (best-effort); **Arabic** reader loads on first fallback pass
 - initializes moderation model synchronously with timeout
 - if model init fails:
   - service still runs in degraded mode
@@ -295,14 +295,16 @@ At startup (`@app.on_event("startup")`):
 
 Main file: `ai-service/app/services/ocr_service.py`
 
-- EasyOCR **single** reader: `["en", "ar"]` only (EasyOCR does **not** allow `ar` with `fr` in the same `lang_list`; first run may download Arabic weights, typically tens–low hundreds of MB)
-- **`verbose=False`** on the reader reduces console noise
-- **GPU** when `torch.cuda.is_available()` and `gpu=True` is passed to EasyOCR
-- Image **thumbnail** to `1280x1280` before OCR to bound memory and time
-- **Output:** unique words from all detections, **case-insensitive**, **first-seen order** (OCR box order, then word order within each box); duplicates skipped without reordering
+- **Two readers:** Latin `["en","fr"]` and Arabic `["ar"]` (EasyOCR does **not** allow `ar` with `fr` in one `lang_list`). Startup preloads **Latin** only (`get_reader()`); Arabic initializes on first fallback.
+- **Adaptive flow:** always run **Latin** `readtext` first. Run **Arabic** `readtext` and merge when **mean Latin confidence is below 0.55** or **`contains_arabizi`** matches digits `3,5,7,9,2` in the joined Latin string. Merged rows are turned into one token stream (**Latin boxes first**, then Arabic).
+- **`verbose=False`** on readers reduces console noise.
+- **GPU** when `torch.cuda.is_available()` (same as other torch paths).
+- Image **thumbnail** to `1280x1280` before OCR to bound memory and time.
+- **Output:** unique words from merged detections, **case-insensitive**, **first-seen order** (box order, word order within box); unchanged contract for `ocr_text_cleanup` / orchestrator.
+- **Logging:** `logger.debug` lines include `mode` (`latin_only` | `latin_plus_arabic`), `latin_conf`, box counts, `time_ms`, output length (enable debug log level to capture).
+- **Latency check:** optional script `ai-service/tests/ocr_latency_test.py` — `py -3 tests/ocr_latency_test.py --image path.png --n 20` (not part of default pytest run).
 - **Digit-heavy token filter:** implemented in `ocr_text_cleanup.py`, applied from `analysis_orchestrator.py` before moderation and dialect detection. A token is **kept** if it is **all digits** (e.g. long codes) or if `digits/len(word) <= OCR_DIGIT_RATIO_THRESHOLD` (default **0.4**). Otherwise it is dropped—trimming garbled OCR (e.g. `100k`, `m54`) that can confuse zero-shot NLI, while keeping typical Arabizi/Latin words and pure-numeric tokens. **Additional pass:** `should_keep_token` drops tokens of length **≤6** that contain **two or more** digit characters (e.g. `5dhit5`, `80u2el`) while keeping **one**-digit Arabizi spellings (`3ayb`, `9ahba`) and pure-digit tokens. Disable with `ENABLE_OCR_CLEANUP=false` if needed; tune via `OCR_DIGIT_RATIO_THRESHOLD`.
-- **Degraded mode:** if EasyOCR fails to construct the reader (e.g. download error), startup continues; `extract_text` returns `""` and `/ready` reports `ocr_loaded: false`; **vision + text moderation** still run on the pipeline (moderation sees empty OCR unless text arrives from other paths)
-- **French OCR:** not supported in this reader. **French (or other Latin) text** that still appears in OCR output can be passed through as tokens the moderation model may partially handle. The architecture could add **French via a second EasyOCR reader** in a future change if product needs it.
+- **Degraded mode:** if the **Latin** reader fails to construct, startup continues; `extract_text` returns `""` and `/ready` reports `ocr_loaded: false`. If **Arabic** fails, Latin-only still runs; fallback to Arabic is skipped with a debug log.
 
 ### 6.3.1 Tunisian dialect support (heuristic)
 
@@ -314,9 +316,25 @@ Main file: `ai-service/app/services/dialect_utils.py` (invoked from `analysis_or
 - **Latin fragments:** minimal suffix/prefix replacements applied only when the token already starts with an Arabic letter after digit mapping (limits false positives on pure English).
 - **Whole-token map:** a small set of Arabizi spellings that would be wrong under the digit table alone (e.g. `9ahba` → `قحبة`) are handled explicitly in code (also present in JSON for lookup).
 - **Detection pipeline (per token):** (1) exact lowercase match on JSON Latin keys; (2) else `normalise_word` and check against the **effective** Arabic risk set; (3) else `difflib.get_close_matches` on Latin keys (`cutoff` **0.8**) to tolerate minor OCR/Latin typos. A hit adds the **canonical Arabic** form to matches (deduped).
-- **API effect:** when a match is found, `matchedKeywords` gains `tunisian_dialect_risk` plus the canonical matched word(s), and the **text** risk score is increased by **+0.2** (capped at **1.0**) before merging with vision via `max`.
+- **API effect:** when a match is found, `matchedKeywords` gains `tunisian_dialect_risk` plus the canonical matched word(s), and the **text** risk score is increased by **+0.3** (capped at **1.0**) before merging with vision via `max`.
 - **Limitations:** dictionary-based, no deep semantic context; OCR errors can miss or distort tokens; fuzzy Latin matching can rarely misfire on very short or ambiguous tokens; tuned for demonstrator scope, not exhaustive dialect coverage.
 - **Compatibility:** does **not** alter `moderate()` or replace zero-shot logic; **augments** keyword list and text risk **only** in `analysis_orchestrator.py` via mutable copies; remains an **optional** layer in the sense that it no-ops when no lexicon match; outputs are **deterministic** for fixed OCR input (given fixed JSON).
+
+### 6.3.2 Accuracy evaluation (post AI-05)
+
+CLI utilities under `ai-service/tests/accuracy/` (not part of default pytest assertions; run manually from `ai-service` root):
+
+| Script | What it measures |
+|--------|------------------|
+| `tests/accuracy/ocr_accuracy_test.py` | Word Accuracy Rate vs `expected_words` or tokenized `input` (type `text`: synthetic render; type `image`: files under `tests/accuracy/images/`) |
+| `tests/accuracy/moderation_accuracy_test.py` | Category + risk calibration on raw `input` via `build_analyze_response_from_plain_text` (no OCR) |
+| `tests/accuracy/pipeline_accuracy_test.py` | End-to-end: `extract_text` → same orchestrator call |
+
+**Dataset:** `tests/accuracy/dataset.json` — fields include `expected_category` (`safe` \| `risky` \| `dangerous` \| `educational`), optional `expected_risk_min` / `expected_risk_max`, `language` (EN/FR/AR/mixed for OCR grouping).
+
+**Common flags:** `--mode simple|detailed`, `--dataset path`, `--images folder`, `--n` (repeat passes for timing), `--export results.json`.
+
+**Shared helpers:** `tests/accuracy/utils.py` (`tokenize_text`, `compute_word_accuracy`, confusion + latency stats).
 
 ### 6.4 Text Moderation Layer
 
