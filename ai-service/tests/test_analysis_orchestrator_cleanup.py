@@ -1,4 +1,4 @@
-from app.services.ocr_text_cleanup import clean_ocr_text
+from app.services.ocr_text_cleanup import clean_ocr_text, should_keep_token
 
 
 def test_clean_ocr_removes_digit_heavy_tokens():
@@ -28,3 +28,11 @@ def test_clean_ocr_drops_half_digit_mixed_at_default_threshold():
     raw = "x 80u2el y"
     out = clean_ocr_text(raw, digit_ratio_threshold=0.4)
     assert out == "x y"
+
+
+def test_should_keep_token_drops_short_digit_mixed():
+    assert should_keep_token("5dhit5") is False
+    assert should_keep_token("80u2el") is False
+    assert should_keep_token("3ayb") is True
+    assert should_keep_token("12345") is True
+    assert should_keep_token("longer80mix") is True

@@ -1,6 +1,21 @@
 """Light OCR post-processing before text moderation (no heavy dependencies)."""
 
 
+def should_keep_token(word: str) -> bool:
+    """
+    Keep token unless it is short (≤5 chars) and contains digits but is not pure digits.
+
+    This removes noisy OCR tokens like ``5dhit5`` while preserving dialect words like ``3ayb``.
+    """
+    if len(word) > 5:
+        return True
+    if word.isdigit():
+        return True
+    if any(c.isdigit() for c in word):
+        return False
+    return True
+
+
 def clean_ocr_text(text: str, digit_ratio_threshold: float = 0.4) -> str:
     """
     Remove whitespace-separated tokens whose digit/total character ratio is too high.

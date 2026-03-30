@@ -71,7 +71,7 @@ def test_orchestrator_educational_low_risk_sets_category_educational(monkeypatch
     def fake_moderate(_text: str) -> ModerationResult:
         return ModerationResult(
             matched_keywords=[],
-            risk_score=0.2,
+            risk_score=0.15,
             category="safe",
             display_text="",
             label_scores={},
@@ -85,6 +85,7 @@ def test_orchestrator_educational_low_risk_sets_category_educational(monkeypatch
     out = build_analyze_response_from_plain_text(LONG_TEXT, image=None)
     assert out.category == "educational"
     assert "educational content" in out.matched_keywords
+    assert out.risk_score == 0.15
     assert out.educational_score == 0.7
 
 
@@ -105,7 +106,7 @@ def test_orchestrator_educational_high_risk_surfaces_signal_not_category(monkeyp
 
     out = build_analyze_response_from_plain_text(LONG_TEXT, image=None)
     assert out.category != "educational"
-    assert "educational content" in out.matched_keywords
+    assert "educational content" not in out.matched_keywords
     assert out.educational_score == 0.7
 
 

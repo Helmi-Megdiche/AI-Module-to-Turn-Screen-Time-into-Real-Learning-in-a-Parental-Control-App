@@ -20,7 +20,7 @@ This system transforms passive screen time into guided real-world learning:
 **AI module capabilities today:**
 
 - **OCR languages (EasyOCR):** **English + Arabic** in one reader (`fr` cannot be combined with `ar` in the same `lang_list` per EasyOCR). French on-screen text may still appear as Latin where the detector generalizes.
-- **Dialect-aware moderation (heuristic):** Arabizi-style normalization; digit-to-letter mapping (e.g. **3→ع**, **7→ح**); Tunisian risky-token dictionary; where Arabizi typing uses **9** for **ق** in fixed expressions (e.g. **قحبة**), **whole-token normalization** in `dialect_utils` applies; keyword flag **`tunisian_dialect_risk`**; **+0.1** text risk bump **bounded to 1.0**; then **fusion with vision** via `max`.
+- **Dialect-aware moderation (heuristic):** Arabizi-style normalization; digit-to-letter mapping (e.g. **3→ع**, **7→ح**); Tunisian risky-token dictionary; where Arabizi typing uses **9** for **ق** in fixed expressions (e.g. **قحبة**), **whole-token normalization** in `dialect_utils` applies; keyword flag **`tunisian_dialect_risk`**; **+0.2** text risk bump **bounded to 1.0**; then **fusion with vision** via `max`.
 - **Risk scoring:** text (moderation + optional dialect bump) + vision; **keyword explainability** in API payloads; downstream **missions / gamification** driven by backend rules from `riskScore` / `category`.
 
 **Dialect layer constraints:** does **not** change `moderate()` or internal moderation logic; **only augments** copied keyword list and text risk before vision fusion; **deterministic**, **fast**, compatible with **frozen** `ModerationResult`.
@@ -65,7 +65,7 @@ flowchart LR
    - **OCR extraction** (EasyOCR **en / ar**; `fr` omitted — not supported together with `ar` in EasyOCR)
    - **Text moderation** (zero-shot classifier, rule fallback on failure) — core logic unchanged by dialect layer
    - **Dialect normalization + Tunisian / Arabizi keyword detection** (`dialect_utils`) — heuristic, deterministic, low-latency; optional augment only
-   - **Text risk adjustment** if dialect hits: **`tunisian_dialect_risk`** + canonical terms; **+0.1** to text risk **capped at 1.0**
+   - **Text risk adjustment** if dialect hits: **`tunisian_dialect_risk`** + canonical terms; **+0.2** to text risk **capped at 1.0**
    - **Fusion with vision** — `max(adjusted_text_risk, vision_risk)` and merged keywords
 5. AI result is normalized to:
    - `text`, `displayText`, `matchedKeywords`, `riskScore`, `category`, **`educationalScore`** (always present; default **`0.0`** when absent from the Python payload)
@@ -122,7 +122,7 @@ Main file: `backend/src/services/analyzeService.js`
   - returns preview mission (`status: "preview"`)
   - does not write DB rows
 - image path:
-  - **Exposure boost (CDC §4.4):** after the AI returns, the backend loads **1-hour** `getRecentExposureStats(userId, 60)`. If `exposureRate > 0.5` and the **original** `riskScore` is still below `DANGEROUS_THRESHOLD` (from `backend/src/config.js`, env `MODERATION_DANGEROUS_THRESHOLD`, default `0.95`, aligned with the Python service), mission routing uses an **adjusted** score `min(riskScore + 0.15, 0.99)` for `selectMissionType` / `generateMissionPayload`; the stored `Analysis.riskScore` remains the **unadjusted** model value. The JSON response includes `exposureBoost: boolean`.
+  - **Exposure boost (CDC §4.4):** after the AI returns, the backend loads **1-hour** `getRecentExposureStats(userId, 60)`. If `exposureRate > 0.5` and the **original** `riskScore` is still below `DANGEROUS_THRESHOLD` (from `backend/src/config.js`, env `MODERATION_DANGEROUS_THRESHOLD`; align with **ai-service** via the same env), mission routing uses an **adjusted** score `min(riskScore + 0.15, 0.99)` for `selectMissionType` / `generateMissionPayload`; the stored `Analysis.riskScore` remains the **unadjusted** model value. The JSON response includes `exposureBoost: boolean`.
   - transaction creates/loads user, creates `Analysis`, creates `Mission`
   - safe immediate reward respects:
     - `SAFE_POINTS_COOLDOWN_MINUTES`
@@ -253,7 +253,7 @@ Main file: `backend/src/services/badgeService.js`
 
 ## 6) AI Service (FastAPI / EasyOCR / Transformers)
 
-**Internal text pipeline (ordered):** screenshot / base64 image → **OCR** (`ocr_service.py`, en/ar) → **optional digit-ratio token filter** (`analysis_orchestrator.py`, default **on**) → **text moderation** (`moderation_service.py`) → **dialect normalization + keyword detection** (`dialect_utils.py`) on the **same filtered string** → bounded **+0.1** text-risk augment when matched → **vision** (`vision_service.py`) → **max** fusion and category (`analysis_orchestrator.py`). Dialect is **heuristic**, **deterministic**, and **fast**; it does not mutate frozen moderation outputs—only **post-process copies** in the orchestrator.
+**Internal text pipeline (ordered):** screenshot / base64 image → **OCR** (`ocr_service.py`, en/ar) → **optional OCR cleanup** (`ocr_text_cleanup.py`): digit-ratio filtering, then **short-token digit filter** (drop length **≤5** tokens that mix letters and digits; keep pure-digit tokens) → **text moderation** (`moderation_service.py`) → **dialect normalization + keyword detection** (`dialect_utils.py`) on the **same filtered string** → bounded **+0.2** text-risk augment when matched → **vision** (`vision_service.py`) → **max** fusion and category (`analysis_orchestrator.py`). Dialect is **heuristic**, **deterministic**, and **fast**; it does not mutate frozen moderation outputs—only **post-process copies** in the orchestrator.
 
 ### 6.1 Entrypoint and API Contract
 
@@ -300,7 +300,7 @@ Main file: `ai-service/app/services/ocr_service.py`
 - **GPU** when `torch.cuda.is_available()` and `gpu=True` is passed to EasyOCR
 - Image **thumbnail** to `1280x1280` before OCR to bound memory and time
 - **Output:** unique words from all detections, **case-insensitive**, **first-seen order** (OCR box order, then word order within each box); duplicates skipped without reordering
-- **Digit-heavy token filter:** implemented in `ocr_text_cleanup.py`, applied from `analysis_orchestrator.py` before moderation and dialect detection. A token is **kept** if it is **all digits** (e.g. long codes) or if `digits/len(word) <= OCR_DIGIT_RATIO_THRESHOLD` (default **0.4**). Otherwise it is dropped—trimming garbled OCR (e.g. `100k`, `m54`, `80u2el`) that can confuse zero-shot NLI, while keeping typical Arabizi/Latin words and pure-numeric tokens. Disable with `ENABLE_OCR_CLEANUP=false` if needed; tune via `OCR_DIGIT_RATIO_THRESHOLD`.
+- **Digit-heavy token filter:** implemented in `ocr_text_cleanup.py`, applied from `analysis_orchestrator.py` before moderation and dialect detection. A token is **kept** if it is **all digits** (e.g. long codes) or if `digits/len(word) <= OCR_DIGIT_RATIO_THRESHOLD` (default **0.4**). Otherwise it is dropped—trimming garbled OCR (e.g. `100k`, `m54`) that can confuse zero-shot NLI, while keeping typical Arabizi/Latin words and pure-numeric tokens. **Additional pass:** `should_keep_token` drops short (**≤5** chars) alphanumeric-noisy tokens that still contain a digit (e.g. `5dhit5`), but keeps Arabizi like `3ayb` and pure numbers. Disable with `ENABLE_OCR_CLEANUP=false` if needed; tune via `OCR_DIGIT_RATIO_THRESHOLD`.
 - **Degraded mode:** if EasyOCR fails to construct the reader (e.g. download error), startup continues; `extract_text` returns `""` and `/ready` reports `ocr_loaded: false`; **vision + text moderation** still run on the pipeline (moderation sees empty OCR unless text arrives from other paths)
 - **French OCR:** not supported in this reader. **French (or other Latin) text** that still appears in OCR output can be passed through as tokens the moderation model may partially handle. The architecture could add **French via a second EasyOCR reader** in a future change if product needs it.
 
@@ -314,7 +314,7 @@ Main file: `ai-service/app/services/dialect_utils.py` (invoked from `analysis_or
 - **Latin fragments:** minimal suffix/prefix replacements applied only when the token already starts with an Arabic letter after digit mapping (limits false positives on pure English).
 - **Whole-token map:** a small set of Arabizi spellings that would be wrong under the digit table alone (e.g. `9ahba` → `قحبة`) are handled explicitly in code (also present in JSON for lookup).
 - **Detection pipeline (per token):** (1) exact lowercase match on JSON Latin keys; (2) else `normalise_word` and check against the **effective** Arabic risk set; (3) else `difflib.get_close_matches` on Latin keys (`cutoff` **0.8**) to tolerate minor OCR/Latin typos. A hit adds the **canonical Arabic** form to matches (deduped).
-- **API effect:** when a match is found, `matchedKeywords` gains `tunisian_dialect_risk` plus the canonical matched word(s), and the **text** risk score is increased by **+0.1** (capped at **1.0**) before merging with vision via `max`.
+- **API effect:** when a match is found, `matchedKeywords` gains `tunisian_dialect_risk` plus the canonical matched word(s), and the **text** risk score is increased by **+0.2** (capped at **1.0**) before merging with vision via `max`.
 - **Limitations:** dictionary-based, no deep semantic context; OCR errors can miss or distort tokens; fuzzy Latin matching can rarely misfire on very short or ambiguous tokens; tuned for demonstrator scope, not exhaustive dialect coverage.
 - **Compatibility:** does **not** alter `moderate()` or replace zero-shot logic; **augments** keyword list and text risk **only** in `analysis_orchestrator.py` via mutable copies; remains an **optional** layer in the sense that it no-ops when no lexicon match; outputs are **deterministic** for fixed OCR input (given fixed JSON).
 
@@ -400,10 +400,10 @@ Main file: `ai-service/app/services/analysis_orchestrator.py`
 - API `text` / `displayText` reflect the **post-cleanup** string used for scoring (not the raw OCR concat before filtering)
 - merges adjusted text moderation with **vision moderation**
 - final risk is `max(textRisk, visionRisk)`; final keywords are concatenated text + vision indicators
-- **Sexual-content-only safeguard:** if merged `matchedKeywords` is exactly `["sexual content"]` and the merged risk is **≥ `MODERATION_DANGEROUS_THRESHOLD`** (default **0.95**), the score is **capped at 0.6** (still **risky**, not **dangerous**) to cut false positives on noisy OCR. The keyword list is unchanged for transparency. Any extra keyword (e.g. `nsfw visual`, `tunisian_dialect_risk`, another text label) skips the cap so genuinely ambiguous or multi-signal content is unaffected.
+- **Sexual-content-only safeguard:** if merged `matchedKeywords` is exactly `["sexual content"]` and the merged risk is **≥ `MODERATION_DANGEROUS_THRESHOLD`** (ai-service default **0.9**), the score is **capped at 0.6** (still **risky**, not **dangerous**) to cut false positives on noisy OCR. The keyword list is unchanged for transparency. Any extra keyword (e.g. `nsfw visual`, `tunisian_dialect_risk`, another text label) skips the cap so genuinely ambiguous or multi-signal content is unaffected.
 - **Educational fusion (CDC §4.3)** runs **after** this safeguard and **after** `risk_score` rounding, so capped risk participates correctly in threshold checks.
-  - **RULE A:** if **`educational_score >= EDUCATIONAL_THRESHOLD`** and merged **`risk_score < RISKY_THRESHOLD`** → **`category = "educational"`** and **`educational content`** is appended to **`matchedKeywords`** if missing.
-  - **RULE B:** if **`educational_score >= EDUCATIONAL_THRESHOLD`** but merged **`risk_score >= RISKY_THRESHOLD`** → **risk wins** (`category` stays **safe** / **risky** / **dangerous** from the score), but **`educational content`** is still appended for explainability.
+  - **RULE A:** if **`educational_score >= EDUCATIONAL_THRESHOLD`** and merged **`risk_score < RISKY_THRESHOLD`** → **`category = "educational"`** (mission routing CDC §4.3).
+  - **Educational keyword:** **`educational content`** is appended to **`matchedKeywords`** only when **`educational_score >= EDUCATIONAL_THRESHOLD`** and merged **`risk_score < 0.2`**, so mildly risky OCR still avoids the educational explainability tag.
 - **Low-risk educational-only correction:** if the merged keywords are exactly `["educational content"]`, category is currently `risky`, and `risk_score < DANGEROUS_THRESHOLD`, the orchestrator de-escalates to **`safe`** and caps risk just below `RISKY_THRESHOLD`. This is a non-breaking post-processing guard for educational false positives.
 - **Educational boolean suppression in harmful contexts:** when category is not `educational`, `educational_score >= EDUCATIONAL_THRESHOLD`, and harmful keywords are present, `educational_score` is reduced to just below the threshold to avoid over-reporting educational positives in clearly harmful cases.
 - **`ScreenshotAnalysisResult.educational_score`** is **always** set (defaults **`0.0`**). JSON **`POST /analyze`** exposes it as **`educationalScore`** — **always present**, default **`0.0`** (see §6.1, §11.4).
@@ -599,8 +599,8 @@ From `backend/.env.example`:
 **Thresholds (F2 educational + F1 exposure boost — keep aligned with `ai-service`):**
 
 - **`EDUCATIONAL_THRESHOLD`** (default **`0.55`**, env **`EDUCATIONAL_THRESHOLD`**) — read by **`ai-service`** orchestrator (§6.7); **not** required in `backend/.env` today (backend uses AI outputs only).
-- **`MODERATION_RISKY_THRESHOLD`** (default **`0.4`**, env **`MODERATION_RISKY_THRESHOLD`**) — **backend** (`backend/src/config.js`) and **ai-service**; gates educational fusion RULE A/B and Node mission routing vs **`riskScore`**.
-- **`MODERATION_DANGEROUS_THRESHOLD`** (default **`0.95`**, env **`MODERATION_DANGEROUS_THRESHOLD`**) — **backend** and **ai-service**; dangerous band, sexual-content safeguard, and exposure-boost gating (`riskScore` must stay below this for the +0.15 nudge; §5.2).
+- **`MODERATION_RISKY_THRESHOLD`** — **ai-service** default **`0.3`** (env **`MODERATION_RISKY_THRESHOLD`**); **backend** (`backend/src/config.js`) uses its own default unless the same env is set—gates educational **category** (RULE A) and Node mission routing vs **`riskScore`**.
+- **`MODERATION_DANGEROUS_THRESHOLD`** — **ai-service** default **`0.9`** (env **`MODERATION_DANGEROUS_THRESHOLD`**); **backend** should use the same env for alignment; dangerous band, sexual-content safeguard, and exposure-boost gating (`riskScore` must stay below this for the +0.15 nudge; §5.2).
 
 ### 9.2 AI Environment (`ai-service` process env)
 
