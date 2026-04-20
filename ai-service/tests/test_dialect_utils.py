@@ -1,5 +1,6 @@
 from app.services.dialect_utils import (
     contains_risky_dialect,
+    is_benign_context,
     normalise_word,
     risky_arabic_effective,
 )
@@ -56,3 +57,40 @@ def test_fuzzy_latin_typo():
 
 def test_risky_arabic_includes_baseline():
     assert "عيب" in risky_arabic_effective()
+
+
+def test_is_benign_context_true_for_pet_sentence():
+    assert is_benign_context("كلب هو حيوان أليف", "كلب") is True
+
+
+def test_is_benign_context_false_for_insult_sentence():
+    assert is_benign_context("يا كلب روح من هنا", "كلب") is False
+
+
+def test_is_benign_context_false_when_benign_word_farther_than_window():
+    text = "كلب واحد اثنان ثلاثة أربعة خمسة حيوان"
+    assert is_benign_context(text, "كلب", window=4) is False
+
+
+def test_contains_risky_dialect_suppresses_benign_pet_context():
+    found, words = contains_risky_dialect("كلب هو حيوان أليف")
+    assert found is False
+    assert words == []
+
+
+def test_contains_risky_dialect_keeps_insult_context():
+    found, words = contains_risky_dialect("يا كلب")
+    assert found is True
+    assert "كلب" in words
+
+
+def test_contains_risky_dialect_detects_new_threat_entry():
+    found, words = contains_risky_dialect("n9tlek")
+    assert found is True
+    assert "نقتلك" in words
+
+
+def test_contains_risky_dialect_detects_new_grooming_entry():
+    found, words = contains_risky_dialect("3tini ra9mek")
+    assert found is True
+    assert "أعطني رقمك" in words

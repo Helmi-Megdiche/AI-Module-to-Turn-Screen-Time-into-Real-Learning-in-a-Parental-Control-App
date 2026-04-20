@@ -81,7 +81,6 @@ RISKY_WORDS: frozenset[str] = frozenset(
         "كلامخايب",
         "حمار",
         "كلب",
-        "عبد",
         "زبي",
         "كس",
         "كسم",
@@ -98,6 +97,33 @@ RISKY_WORDS: frozenset[str] = frozenset(
 )
 
 _ARABIC_LEADING = re.compile(r"^[\u0600-\u06FF]")
+
+BENIGN_CONTEXT_WORDS: frozenset[str] = frozenset(
+    {
+        # Arabic
+        "حيوان",
+        "أليف",
+        "كلبي",
+        "كلاب",
+        "قط",
+        "قطط",
+        "حيوانات",
+        # English
+        "dog",
+        "cat",
+        "animal",
+        "pet",
+        "pets",
+        "puppy",
+        "kitten",
+        # French
+        "chien",
+        "chat",
+        "chiens",
+        "chats",
+        "chiot",
+    }
+)
 
 
 def _word_has_arabizi_digit(word: str) -> bool:
@@ -118,6 +144,7 @@ def _load_dialect_bundle() -> dict[str, Any]:
         return _DIALECT_CACHE
 
     latin_to_arabic: dict[str, str] = {}
+    phrase_latin_to_arabic: dict[str, str] = {}
     json_arabic: set[str] = set()
     try:
         data = json.loads(_DIALECT_JSON.read_text(encoding="utf-8"))
@@ -125,6 +152,8 @@ def _load_dialect_bundle() -> dict[str, Any]:
             lat = str(item["latin"]).lower()
             arb = str(item["arabic"])
             latin_to_arabic[lat] = arb
+            if " " in lat:
+                phrase_latin_to_arabic[lat] = arb
             json_arabic.add(arb)
     except FileNotFoundError:
         logger.warning("tunisian_dialect.json not found at %s", _DIALECT_JSON)
@@ -134,6 +163,10 @@ def _load_dialect_bundle() -> dict[str, Any]:
     risky_arabic_effective: frozenset[str] = frozenset(RISKY_WORDS) | frozenset(json_arabic)
     _DIALECT_CACHE = {
         "latin_to_arabic": latin_to_arabic,
+        "phrase_latin_to_arabic": phrase_latin_to_arabic,
+        "phrase_lengths": sorted(
+            {len(k.split()) for k in phrase_latin_to_arabic.keys()}
+        ),
         "risky_arabic_effective": risky_arabic_effective,
         "latin_keys": sorted(latin_to_arabic.keys()),
     }
@@ -171,6 +204,27 @@ def normalise_word(word: str) -> str:
     return t
 
 
+def is_benign_context(text: str, matched_word: str, window: int = 4) -> bool:
+    """
+    Returns True if ``matched_word`` appears within ``window`` tokens of a benign
+    context word.
+    """
+    if not text or not matched_word:
+        return False
+
+    tokens = text.lower().split()
+    matched_lower = matched_word.lower()
+    try:
+        idx = next(i for i, t in enumerate(tokens) if matched_lower in t)
+    except StopIteration:
+        return False
+
+    left = max(0, idx - window)
+    right = idx + window + 1
+    window_tokens = set(tokens[left:right])
+    return bool(window_tokens & BENIGN_CONTEXT_WORDS)
+
+
 def contains_risky_dialect(text: str) -> tuple[bool, list[str]]:
     """Return (has_risk, matched_canonical Arabic words) using JSON + normalization + fuzzy Latin."""
     if not (text or "").strip():
@@ -178,12 +232,34 @@ def contains_risky_dialect(text: str) -> tuple[bool, list[str]]:
 
     bundle = _load_dialect_bundle()
     latin_to_arabic: dict[str, str] = bundle["latin_to_arabic"]
+    phrase_latin_to_arabic: dict[str, str] = bundle["phrase_latin_to_arabic"]
+    phrase_lengths: list[int] = bundle["phrase_lengths"]
     risky: frozenset[str] = bundle["risky_arabic_effective"]
     latin_keys: list[str] = bundle["latin_keys"]
 
     words = re.findall(r"\b\w+\b", text, flags=re.UNICODE)
     matched: list[str] = []
     seen: set[str] = set()
+
+    # Phrase-first pass for entries that include spaces, e.g. "3tini ra9mek".
+    lower_words = [w.lower() for w in words]
+    if phrase_lengths:
+        for i in range(len(lower_words)):
+            for phrase_len in phrase_lengths:
+                j = i + phrase_len
+                if j > len(lower_words):
+                    continue
+                phrase = " ".join(lower_words[i:j])
+                canonical = phrase_latin_to_arabic.get(phrase)
+                if (
+                    canonical
+                    and canonical in risky
+                    and canonical not in seen
+                    and not is_benign_context(text, canonical)
+                ):
+                    seen.add(canonical)
+                    matched.append(canonical)
+
     for w in words:
         lower = w.lower()
         canonical: str | None = None
@@ -199,7 +275,12 @@ def contains_risky_dialect(text: str) -> tuple[bool, list[str]]:
                 if fuzz is not None:
                     canonical = latin_to_arabic.get(fuzz)
 
-        if canonical and canonical in risky and canonical not in seen:
+        if (
+            canonical
+            and canonical in risky
+            and canonical not in seen
+            and not is_benign_context(text, canonical)
+        ):
             seen.add(canonical)
             matched.append(canonical)
     return (len(matched) > 0, matched)

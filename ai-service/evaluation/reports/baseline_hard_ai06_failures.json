@@ -1,0 +1,472 @@
+{
+  "run_timestamp_utc": "2026-04-20 18:05:28 UTC",
+  "dataset": "C:/Users/helmi/OneDrive/Bureau/PFE/AI-Module-to-Turn-Screen-Time-into-Real-Learning-in-a-Parental-Control-App/ai-service/evaluation/datasets/hard_cases_v1.json",
+  "failure_count": 15,
+  "failures": [
+    {
+      "id": "hard_001",
+      "language": "arabizi",
+      "slice": "dialect",
+      "text": "3ayb",
+      "expectedCategory": "risky",
+      "actualCategory": "risky",
+      "categoryOk": true,
+      "expectedLabels": [
+        "tunisian_dialect_risk",
+        "عيب"
+      ],
+      "actualLabels": [
+        "tunisian_dialect_risk",
+        "عيب"
+      ],
+      "expectedRiskMin": 0.4,
+      "expectedRiskMax": 0.6,
+      "actualRisk": 0.3,
+      "riskOk": false,
+      "expectedEducational": null,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": null,
+      "expectedEducationalMin": null,
+      "expectedEducationalMax": null,
+      "actualEducationalScore": 0.0,
+      "educationalRangeOk": null,
+      "reasons": [
+        "risk: 0.30 not in [0.4, 0.6]"
+      ]
+    },
+    {
+      "id": "hard_002",
+      "language": "arabizi",
+      "slice": "dialect",
+      "text": "7mar",
+      "expectedCategory": "risky",
+      "actualCategory": "risky",
+      "categoryOk": true,
+      "expectedLabels": [
+        "tunisian_dialect_risk",
+        "حمار"
+      ],
+      "actualLabels": [
+        "tunisian_dialect_risk",
+        "حمار"
+      ],
+      "expectedRiskMin": 0.4,
+      "expectedRiskMax": 0.6,
+      "actualRisk": 0.3,
+      "riskOk": false,
+      "expectedEducational": null,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": null,
+      "expectedEducationalMin": null,
+      "expectedEducationalMax": null,
+      "actualEducationalScore": 0.0,
+      "educationalRangeOk": null,
+      "reasons": [
+        "risk: 0.30 not in [0.4, 0.6]"
+      ]
+    },
+    {
+      "id": "hard_004",
+      "language": "arabizi",
+      "slice": "dialect",
+      "text": "5dhit",
+      "expectedCategory": "risky",
+      "actualCategory": "risky",
+      "categoryOk": true,
+      "expectedLabels": [
+        "tunisian_dialect_risk",
+        "خذيت"
+      ],
+      "actualLabels": [
+        "sexual content",
+        "threat"
+      ],
+      "expectedRiskMin": 0.4,
+      "expectedRiskMax": 0.6,
+      "actualRisk": 0.77,
+      "riskOk": false,
+      "expectedEducational": null,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": null,
+      "expectedEducationalMin": null,
+      "expectedEducationalMax": null,
+      "actualEducationalScore": 0.54,
+      "educationalRangeOk": null,
+      "reasons": [
+        "risk: 0.77 not in [0.4, 0.6]"
+      ]
+    },
+    {
+      "id": "hard_005",
+      "language": "arabizi",
+      "slice": "neutral",
+      "text": "chwaya",
+      "expectedCategory": "safe",
+      "actualCategory": "dangerous",
+      "categoryOk": false,
+      "expectedLabels": [],
+      "actualLabels": [
+        "sexual content",
+        "threat"
+      ],
+      "expectedRiskMin": 0.0,
+      "expectedRiskMax": 0.3,
+      "actualRisk": 0.92,
+      "riskOk": false,
+      "expectedEducational": null,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": null,
+      "expectedEducationalMin": null,
+      "expectedEducationalMax": null,
+      "actualEducationalScore": 0.54,
+      "educationalRangeOk": null,
+      "reasons": [
+        "category: expected 'safe' got 'dangerous'",
+        "risk: 0.92 not in [0.0, 0.3]"
+      ]
+    },
+    {
+      "id": "hard_007",
+      "language": "arabizi",
+      "slice": "neutral",
+      "text": "3lech",
+      "expectedCategory": "safe",
+      "actualCategory": "risky",
+      "categoryOk": false,
+      "expectedLabels": [],
+      "actualLabels": [
+        "sexual content",
+        "threat"
+      ],
+      "expectedRiskMin": 0.0,
+      "expectedRiskMax": 0.3,
+      "actualRisk": 0.83,
+      "riskOk": false,
+      "expectedEducational": null,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": null,
+      "expectedEducationalMin": null,
+      "expectedEducationalMax": null,
+      "actualEducationalScore": 0.54,
+      "educationalRangeOk": null,
+      "reasons": [
+        "category: expected 'safe' got 'risky'",
+        "risk: 0.83 not in [0.0, 0.3]"
+      ]
+    },
+    {
+      "id": "hard_008",
+      "language": "arabizi",
+      "slice": "neutral",
+      "text": "n9oul",
+      "expectedCategory": "safe",
+      "actualCategory": "risky",
+      "categoryOk": false,
+      "expectedLabels": [],
+      "actualLabels": [
+        "sexual content",
+        "threat"
+      ],
+      "expectedRiskMin": 0.0,
+      "expectedRiskMax": 0.3,
+      "actualRisk": 0.76,
+      "riskOk": false,
+      "expectedEducational": null,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": null,
+      "expectedEducationalMin": null,
+      "expectedEducationalMax": null,
+      "actualEducationalScore": 0.54,
+      "educationalRangeOk": null,
+      "reasons": [
+        "category: expected 'safe' got 'risky'",
+        "risk: 0.76 not in [0.0, 0.3]"
+      ]
+    },
+    {
+      "id": "hard_010",
+      "language": "mixed",
+      "slice": "mixed",
+      "text": "this video is 3ayb",
+      "expectedCategory": "risky",
+      "actualCategory": "risky",
+      "categoryOk": true,
+      "expectedLabels": [
+        "tunisian_dialect_risk",
+        "عيب"
+      ],
+      "actualLabels": [
+        "tunisian_dialect_risk",
+        "عيب"
+      ],
+      "expectedRiskMin": 0.4,
+      "expectedRiskMax": 0.6,
+      "actualRisk": 0.39,
+      "riskOk": false,
+      "expectedEducational": null,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": null,
+      "expectedEducationalMin": null,
+      "expectedEducationalMax": null,
+      "actualEducationalScore": 0.01,
+      "educationalRangeOk": null,
+      "reasons": [
+        "risk: 0.39 not in [0.4, 0.6]"
+      ]
+    },
+    {
+      "id": "hard_011",
+      "language": "mixed",
+      "slice": "mixed",
+      "text": "you are 7mar",
+      "expectedCategory": "risky",
+      "actualCategory": "risky",
+      "categoryOk": true,
+      "expectedLabels": [
+        "tunisian_dialect_risk",
+        "حمار"
+      ],
+      "actualLabels": [
+        "sexual content",
+        "threat",
+        "tunisian_dialect_risk",
+        "حمار"
+      ],
+      "expectedRiskMin": 0.4,
+      "expectedRiskMax": 0.6,
+      "actualRisk": 0.89,
+      "riskOk": false,
+      "expectedEducational": null,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": null,
+      "expectedEducationalMin": null,
+      "expectedEducationalMax": null,
+      "actualEducationalScore": 0.54,
+      "educationalRangeOk": null,
+      "reasons": [
+        "risk: 0.89 not in [0.4, 0.6]"
+      ]
+    },
+    {
+      "id": "hard_016",
+      "language": "arabizi",
+      "slice": "punctuation",
+      "text": "3ayb!!",
+      "expectedCategory": "risky",
+      "actualCategory": "dangerous",
+      "categoryOk": false,
+      "expectedLabels": [
+        "tunisian_dialect_risk",
+        "عيب"
+      ],
+      "actualLabels": [
+        "sexual content",
+        "threat",
+        "tunisian_dialect_risk",
+        "عيب"
+      ],
+      "expectedRiskMin": 0.4,
+      "expectedRiskMax": 0.6,
+      "actualRisk": 0.93,
+      "riskOk": false,
+      "expectedEducational": null,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": null,
+      "expectedEducationalMin": null,
+      "expectedEducationalMax": null,
+      "actualEducationalScore": 0.54,
+      "educationalRangeOk": null,
+      "reasons": [
+        "category: expected 'risky' got 'dangerous'",
+        "risk: 0.93 not in [0.4, 0.6]"
+      ]
+    },
+    {
+      "id": "hard_018",
+      "language": "arabic",
+      "slice": "punctuation",
+      "text": "هذا عيب؟",
+      "expectedCategory": "risky",
+      "actualCategory": "risky",
+      "categoryOk": true,
+      "expectedLabels": [
+        "tunisian_dialect_risk",
+        "عيب"
+      ],
+      "actualLabels": [
+        "threat",
+        "tunisian_dialect_risk",
+        "عيب"
+      ],
+      "expectedRiskMin": 0.4,
+      "expectedRiskMax": 0.6,
+      "actualRisk": 0.84,
+      "riskOk": false,
+      "expectedEducational": null,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": null,
+      "expectedEducationalMin": null,
+      "expectedEducationalMax": null,
+      "actualEducationalScore": 0.54,
+      "educationalRangeOk": null,
+      "reasons": [
+        "risk: 0.84 not in [0.4, 0.6]"
+      ]
+    },
+    {
+      "id": "hard_019",
+      "language": "mixed",
+      "slice": "educational_borderline",
+      "text": "learn how to be respectful, don't be 3ayb",
+      "expectedCategory": "educational",
+      "actualCategory": "risky",
+      "categoryOk": false,
+      "expectedLabels": [
+        "educational content"
+      ],
+      "actualLabels": [
+        "tunisian_dialect_risk",
+        "عيب"
+      ],
+      "expectedRiskMin": 0.0,
+      "expectedRiskMax": 0.3,
+      "actualRisk": 0.54,
+      "riskOk": false,
+      "expectedEducational": true,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": false,
+      "expectedEducationalMin": 0.55,
+      "expectedEducationalMax": 1.0,
+      "actualEducationalScore": 0.54,
+      "educationalRangeOk": false,
+      "reasons": [
+        "category: expected 'educational' got 'risky'",
+        "risk: 0.54 not in [0.0, 0.3]"
+      ]
+    },
+    {
+      "id": "hard_022",
+      "language": "arabic",
+      "slice": "educational",
+      "text": "درس الرياضيات",
+      "expectedCategory": "educational",
+      "actualCategory": "risky",
+      "categoryOk": false,
+      "expectedLabels": [
+        "educational content"
+      ],
+      "actualLabels": [],
+      "expectedRiskMin": 0.0,
+      "expectedRiskMax": 0.3,
+      "actualRisk": 0.41,
+      "riskOk": false,
+      "expectedEducational": true,
+      "actualEducationalFlag": true,
+      "educationalBoolOk": true,
+      "expectedEducationalMin": 0.55,
+      "expectedEducationalMax": 1.0,
+      "actualEducationalScore": 1.0,
+      "educationalRangeOk": true,
+      "reasons": [
+        "category: expected 'educational' got 'risky'",
+        "risk: 0.41 not in [0.0, 0.3]"
+      ]
+    },
+    {
+      "id": "hard_023",
+      "language": "arabic",
+      "slice": "dialect",
+      "text": "يا كلب",
+      "expectedCategory": "risky",
+      "actualCategory": "dangerous",
+      "categoryOk": false,
+      "expectedLabels": [
+        "tunisian_dialect_risk",
+        "كلب"
+      ],
+      "actualLabels": [
+        "sexual content",
+        "threat",
+        "tunisian_dialect_risk",
+        "كلب"
+      ],
+      "expectedRiskMin": 0.4,
+      "expectedRiskMax": 0.6,
+      "actualRisk": 0.96,
+      "riskOk": false,
+      "expectedEducational": null,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": null,
+      "expectedEducationalMin": null,
+      "expectedEducationalMax": null,
+      "actualEducationalScore": 0.54,
+      "educationalRangeOk": null,
+      "reasons": [
+        "category: expected 'risky' got 'dangerous'",
+        "risk: 0.96 not in [0.4, 0.6]"
+      ]
+    },
+    {
+      "id": "hard_026",
+      "language": "arabizi",
+      "slice": "dialect",
+      "text": "3aYb",
+      "expectedCategory": "risky",
+      "actualCategory": "risky",
+      "categoryOk": true,
+      "expectedLabels": [
+        "tunisian_dialect_risk",
+        "عيب"
+      ],
+      "actualLabels": [
+        "tunisian_dialect_risk",
+        "عيب"
+      ],
+      "expectedRiskMin": 0.4,
+      "expectedRiskMax": 0.6,
+      "actualRisk": 0.3,
+      "riskOk": false,
+      "expectedEducational": null,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": null,
+      "expectedEducationalMin": null,
+      "expectedEducationalMax": null,
+      "actualEducationalScore": 0.0,
+      "educationalRangeOk": null,
+      "reasons": [
+        "risk: 0.30 not in [0.4, 0.6]"
+      ]
+    },
+    {
+      "id": "hard_027",
+      "language": "arabizi",
+      "slice": "dialect",
+      "text": "7MaR",
+      "expectedCategory": "risky",
+      "actualCategory": "risky",
+      "categoryOk": true,
+      "expectedLabels": [
+        "tunisian_dialect_risk",
+        "حمار"
+      ],
+      "actualLabels": [
+        "tunisian_dialect_risk",
+        "حمار"
+      ],
+      "expectedRiskMin": 0.4,
+      "expectedRiskMax": 0.6,
+      "actualRisk": 0.3,
+      "riskOk": false,
+      "expectedEducational": null,
+      "actualEducationalFlag": false,
+      "educationalBoolOk": null,
+      "expectedEducationalMin": null,
+      "expectedEducationalMax": null,
+      "actualEducationalScore": 0.0,
+      "educationalRangeOk": null,
+      "reasons": [
+        "risk: 0.30 not in [0.4, 0.6]"
+      ]
+    }
+  ]
+}

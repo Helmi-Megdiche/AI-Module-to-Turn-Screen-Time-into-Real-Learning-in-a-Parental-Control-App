@@ -22,6 +22,108 @@ from app.services.ocr_text_cleanup import clean_ocr_text, should_keep_token
 
 logger = logging.getLogger(__name__)
 
+# Deterministic French harm phrases: mDeBERTa NLI often under-scores French threat hypotheses vs EN/AR.
+FRENCH_DANGEROUS_HINTS = (
+    "je vais te tuer",
+    "je vais vous tuer",
+    "je vais te frapper",
+    "je vais te retrouver",
+    "on va te retrouver",
+    "tu vas mourir",
+    "fabriquer une arme",
+    "fabriquer un engin",
+    "logiciel espion",
+    "voler les données",
+    "rejoins notre groupe",
+    "par tous les moyens",
+    "en finir avec ma vie",
+    "vendre des drogues",
+    "acheter de la drogue",
+)
+
+FRENCH_GROOMING_HINTS = (
+    "viens chez moi",
+    "donne moi ton numéro",
+    "donne-moi ton numéro",
+    "envoie moi ta photo",
+    "envoie-moi une photo",
+    "personne ne doit savoir",
+    "c'est notre secret",
+    "ne dis pas à tes parents",
+    "ne le dis à personne",
+    "rejoins moi en privé",
+    "rejoins-moi en privé",
+    "parle moi en privé",
+    "tu es différente des autres",
+    "tu es spéciale",
+)
+
+EDUCATIONAL_HINT_WORDS = (
+    "learn",
+    "learning",
+    "study",
+    "lesson",
+    "tutorial",
+    "explain",
+    "explanation",
+    "definition",
+    "concept",
+    "history",
+    "science",
+    "math",
+    "grammar",
+    "why",
+    "how",
+    "example",
+    "apprentissage",
+    "étudier",
+    "étude",
+    "étudie",
+    "enseigner",
+    "enseignement",
+    "cours",
+    "mathématiques",
+    "mathématique",
+    "sciences",
+    "physique",
+    "chimie",
+    "biologie",
+    "géographie",
+    "littérature",
+    "philosophie",
+    "théorème",
+    "formule",
+    "équation",
+    "algorithme",
+    "révolution",
+    "planète",
+    "photosynthèse",
+    "atome",
+    "molécule",
+    "adn",
+    "système solaire",
+    "cycle de l'eau",
+    "droits de l'enfant",
+    "تعلم",
+    "تعليم",
+    "درس",
+    "دراسة",
+    "رياضيات",
+    "علوم",
+    "فيزياء",
+    "تاريخ",
+    "جغرافيا",
+    "النظام الشمسي",
+    "كوكب",
+    "شرح",
+    "تعريف",
+    "مثال",
+    "histoire",
+    "leçon",
+    "apprendre",
+    "expliquer",
+)
+
 # When text+vision merge yields only "sexual content" above thresholds, raw scores can be
 # falsely "dangerous" on noisy OCR; cap keeps parents alerted without max severity.
 _SEXUAL_CONTENT_ONLY_CAP = 0.6
@@ -79,7 +181,20 @@ def build_analyze_response_from_plain_text(
     if dialect_risk:
         logger.info("[DialectDetection] matches=%s", dialect_matches)
         text_keywords.extend(["tunisian_dialect_risk"] + dialect_matches)
-        text_risk = min(1.0, text_risk + 0.3)
+        if text_risk < 0.6:
+            text_risk = min(1.0, text_risk + 0.3)
+        else:
+            text_risk = min(1.0, text_risk + 0.1)
+
+    text_lower = effective.lower()
+    if any(kw in text_lower for kw in FRENCH_DANGEROUS_HINTS):
+        text_risk = max(text_risk, 0.92)
+        if "french_dangerous_pattern" not in text_keywords:
+            text_keywords.append("french_dangerous_pattern")
+    elif any(kw in text_lower for kw in FRENCH_GROOMING_HINTS):
+        text_risk = max(text_risk, 0.75)
+        if "french_grooming_pattern" not in text_keywords:
+            text_keywords.append("french_grooming_pattern")
 
     vision_mod = vision_service.classify_image(image) if image is not None else {
         "riskScore": 0.0,
@@ -100,15 +215,23 @@ def build_analyze_response_from_plain_text(
     is_educational = text_mod.educational_score >= config.EDUCATIONAL_THRESHOLD
     edu_score = float(text_mod.educational_score)
 
-    if is_educational and risk_score < config.RISKY_THRESHOLD:
-        category = "educational"
-
+    has_semantic_educational_hint = any(
+        w in text_lower for w in EDUCATIONAL_HINT_WORDS
+    )
     if (
-        text_mod.educational_score >= config.EDUCATIONAL_THRESHOLD
-        and risk_score < 0.2
+        text_mod.educational_score >= 0.65
+        and risk_score < config.RISKY_THRESHOLD
+        and has_semantic_educational_hint
         and "educational content" not in matched_keywords
     ):
         matched_keywords.append("educational content")
+
+    # RULE A — educational override (tightened)
+    has_educational_signal = any(
+        k in matched_keywords for k in ["educational content", "learning"]
+    )
+    if is_educational and risk_score < config.RISKY_THRESHOLD and has_educational_signal:
+        category = "educational"
 
     # False-positive guard: when only educational signal is present, avoid escalating
     # to risky solely from noisy moderation scores.

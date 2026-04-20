@@ -20,7 +20,7 @@ This system transforms passive screen time into guided real-world learning:
 **AI module capabilities today:**
 
 - **OCR languages (EasyOCR):** **adaptive dual readers** — **Latin** `en`+`fr` first, then **Arabic** `ar` only when Latin mean confidence is below **0.55** or **Arabizi hints** (`3`,`5`,`7`,`9`,`2`) appear in the Latin output — avoids triple-lang cost on every request while covering French and Arabic script.
-- **Dialect-aware moderation (heuristic):** Arabizi-style normalization; digit-to-letter mapping (e.g. **3→ع**, **7→ح**); Tunisian risky-token dictionary; where Arabizi typing uses **9** for **ق** in fixed expressions (e.g. **قحبة**), **whole-token normalization** in `dialect_utils` applies; keyword flag **`tunisian_dialect_risk`**; **+0.3** text risk bump **bounded to 1.0**; then **fusion with vision** via `max`.
+- **Dialect-aware moderation (heuristic):** Arabizi-style normalization; digit-to-letter mapping (e.g. **3→ع**, **7→ح**); Tunisian risky-token dictionary; where Arabizi typing uses **9** for **ق** in fixed expressions (e.g. **قحبة**), **whole-token normalization** in `dialect_utils` applies; keyword flag **`tunisian_dialect_risk`**; tiered text-risk bump (**+0.3** when base text risk **&lt; 0.6**, else **+0.1**, capped at **1.0**); optional **French two-tier** substring rules in `analysis_orchestrator` (**`french_dangerous_pattern`** at **0.92**, **`french_grooming_pattern`** at **0.75**) where NLI under-scores threats/grooming; then **fusion with vision** via `max`.
 - **Risk scoring:** text (moderation + optional dialect bump) + vision; **keyword explainability** in API payloads; downstream **missions / gamification** driven by backend rules from `riskScore` / `category`.
 
 **Dialect layer constraints:** does **not** change `moderate()` or internal moderation logic; **only augments** copied keyword list and text risk before vision fusion; **deterministic**, **fast**, compatible with **frozen** `ModerationResult`.
@@ -253,7 +253,7 @@ Main file: `backend/src/services/badgeService.js`
 
 ## 6) AI Service (FastAPI / EasyOCR / Transformers)
 
-**Internal text pipeline (ordered):** screenshot / base64 image → **OCR** (`ocr_service.py`, adaptive **en+fr** then optional **ar**) → **optional OCR cleanup** (`ocr_text_cleanup.py`): digit-ratio filtering, then **`should_keep_token`** (drop short tokens with **≥2** digit characters unless the token is all digits; keeps **single-digit** Arabizi such as `3ayb` / `9ahba`) → **text moderation** (`moderation_service.py`) → **dialect normalization + keyword detection** (`dialect_utils.py`) on the **same filtered string** → bounded **+0.3** text-risk augment when matched → **vision** (`vision_service.py`) → **max** fusion and category (`analysis_orchestrator.py`). Dialect is **heuristic**, **deterministic**, and **fast**; it does not mutate frozen moderation outputs—only **post-process copies** in the orchestrator.
+**Internal text pipeline (ordered):** screenshot / base64 image → **OCR** (`ocr_service.py`, adaptive **en+fr** then optional **ar**) → **optional OCR cleanup** (`ocr_text_cleanup.py`): digit-ratio filtering, then **`should_keep_token`** (drop short tokens with **≥2** digit characters unless the token is all digits; keeps **single-digit** Arabizi such as `3ayb` / `9ahba`) → **text moderation** (`moderation_service.py`) → **dialect normalization + keyword detection** (`dialect_utils.py`) on the **same filtered string** → tiered text-risk augment when matched (**+0.3** if base risk **&lt; 0.6**, else **+0.1**, capped at **1.0**) → **French two-tier hint** check (dangerous/grooming) → **vision** (`vision_service.py`) → **max** fusion and category (`analysis_orchestrator.py`). Dialect is **heuristic**, **deterministic**, and **fast**; it does not mutate frozen moderation outputs—only **post-process copies** in the orchestrator.
 
 ### 6.1 Entrypoint and API Contract
 
@@ -316,7 +316,7 @@ Main file: `ai-service/app/services/dialect_utils.py` (invoked from `analysis_or
 - **Latin fragments:** minimal suffix/prefix replacements applied only when the token already starts with an Arabic letter after digit mapping (limits false positives on pure English).
 - **Whole-token map:** a small set of Arabizi spellings that would be wrong under the digit table alone (e.g. `9ahba` → `قحبة`) are handled explicitly in code (also present in JSON for lookup).
 - **Detection pipeline (per token):** (1) exact lowercase match on JSON Latin keys; (2) else `normalise_word` and check against the **effective** Arabic risk set; (3) else `difflib.get_close_matches` on Latin keys (`cutoff` **0.8**) to tolerate minor OCR/Latin typos. A hit adds the **canonical Arabic** form to matches (deduped).
-- **API effect:** when a match is found, `matchedKeywords` gains `tunisian_dialect_risk` plus the canonical matched word(s), and the **text** risk score is increased by **+0.3** (capped at **1.0**) before merging with vision via `max`.
+- **API effect:** when a match is found, `matchedKeywords` gains `tunisian_dialect_risk` plus the canonical matched word(s), and the **text** risk score is increased by **+0.3** when base text risk is **below 0.6**, otherwise **+0.1** (capped at **1.0**) before French dangerous rules and vision merge.
 - **Limitations:** dictionary-based, no deep semantic context; OCR errors can miss or distort tokens; fuzzy Latin matching can rarely misfire on very short or ambiguous tokens; tuned for demonstrator scope, not exhaustive dialect coverage.
 - **Compatibility:** does **not** alter `moderate()` or replace zero-shot logic; **augments** keyword list and text risk **only** in `analysis_orchestrator.py` via mutable copies; remains an **optional** layer in the sense that it no-ops when no lexicon match; outputs are **deterministic** for fixed OCR input (given fixed JSON).
 
@@ -359,8 +359,9 @@ Main file: `ai-service/app/services/moderation_service.py`
   - cached results (`lru_cache`) to reduce repeated inference costs
   - **`EDUCATIONAL_THRESHOLD`** (`env: **`EDUCATIONAL_THRESHOLD`**, default **`0.55`**) is read in **`analysis_orchestrator`**, not inside **`moderate()`**; it gates whether the educational signal participates in category fusion (see §6.7).
   - **risk score** = max over **harm** label scores only (educational/learning excluded so homework-style text does not read as “high risk”)
+  - **sexual content floor:** NLI label **`sexual content`** is **omitted** from this max and from **`matched_keywords`** when its score is **below `SEXUAL_CONTENT_MIN_CONFIDENCE`** (default **0.5**, env **`MODERATION_SEXUAL_CONTENT_MIN_CONFIDENCE`**) to reduce zero-shot false positives on short benign text; raw score still appears in **`label_scores`**
   - **educational score** = max(`educational`, `learning`) from full `label_scores` after classification — **not** derived from `matchedKeywords` (which omit sub-threshold scores and exclude educational keys by design)
-  - `matchedKeywords` = harm labels above `MATCHED_KEYWORDS_THRESHOLD`
+  - `matchedKeywords` = harm labels above `MATCHED_KEYWORDS_THRESHOLD` (after the sexual-content floor filter)
 - fallback conditions:
   - empty OCR text
   - very short OCR text
@@ -415,13 +416,14 @@ Main file: `ai-service/app/services/vision_service.py`
 Main file: `ai-service/app/services/analysis_orchestrator.py`
 
 - applies **digit-ratio OCR cleanup** when `ENABLE_OCR_CLEANUP` is true (default), then runs **text moderation** and **Tunisian/Arabizi heuristic** detection on that string (mutable copies of keywords/risk — `ModerationResult` is frozen)
+- **French tiered patterns:** substring match on the effective (post-cleanup) lower‑cased text against fixed French phrase lists; **dangerous hints** set **`text_risk = max(text_risk, 0.92)`** and append **`french_dangerous_pattern`**. Else-if **grooming hints** set **`text_risk = max(text_risk, 0.75)`** and append **`french_grooming_pattern`** (after dialect bump, before vision `max`).
 - API `text` / `displayText` reflect the **post-cleanup** string used for scoring (not the raw OCR concat before filtering)
 - merges adjusted text moderation with **vision moderation**
 - final risk is `max(textRisk, visionRisk)`; final keywords are concatenated text + vision indicators
 - **Sexual-content-only safeguard:** if merged `matchedKeywords` is exactly `["sexual content"]` and the merged risk is **≥ `MODERATION_DANGEROUS_THRESHOLD`** (ai-service default **0.9**), the score is **capped at 0.6** (still **risky**, not **dangerous**) to cut false positives on noisy OCR. The keyword list is unchanged for transparency. Any extra keyword (e.g. `nsfw visual`, `tunisian_dialect_risk`, another text label) skips the cap so genuinely ambiguous or multi-signal content is unaffected.
 - **Educational fusion (CDC §4.3)** runs **after** this safeguard and **after** `risk_score` rounding, so capped risk participates correctly in threshold checks.
   - **RULE A:** if **`educational_score >= EDUCATIONAL_THRESHOLD`** and merged **`risk_score < RISKY_THRESHOLD`** → **`category = "educational"`** (mission routing CDC §4.3).
-  - **Educational keyword:** **`educational content`** is appended to **`matchedKeywords`** only when **`educational_score >= EDUCATIONAL_THRESHOLD`** and merged **`risk_score < 0.2`**, so mildly risky OCR still avoids the educational explainability tag.
+  - **Educational keyword:** **`educational content`** is appended to **`matchedKeywords`** only when **`educational_score >= 0.65`**, merged **`risk_score < RISKY_THRESHOLD`**, and the text contains a multilingual educational semantic hint (EN/FR/AR list in orchestrator). This keeps explainability conservative while allowing educational override when low-risk context is explicit.
 - **Low-risk educational-only correction:** if the merged keywords are exactly `["educational content"]`, category is currently `risky`, and `risk_score < DANGEROUS_THRESHOLD`, the orchestrator de-escalates to **`safe`** and caps risk just below `RISKY_THRESHOLD`. This is a non-breaking post-processing guard for educational false positives.
 - **Educational boolean suppression in harmful contexts:** when category is not `educational`, `educational_score >= EDUCATIONAL_THRESHOLD`, and harmful keywords are present, `educational_score` is reduced to just below the threshold to avoid over-reporting educational positives in clearly harmful cases.
 - **`ScreenshotAnalysisResult.educational_score`** is **always** set (defaults **`0.0`**). JSON **`POST /analyze`** exposes it as **`educationalScore`** — **always present**, default **`0.0`** (see §6.1, §11.4).
@@ -631,6 +633,7 @@ From `ai-service/app/config.py`:
 - `MODERATION_DANGEROUS_THRESHOLD`
 - `EDUCATIONAL_THRESHOLD` (default `0.55`) — confidence floor for treating educational/learning NLI signals (not a `MODERATION_*` prefix)
 - `MODERATION_MATCHED_KEYWORDS_THRESHOLD`
+- `MODERATION_SEXUAL_CONTENT_MIN_CONFIDENCE` (default `0.5`) — drop low-confidence zero-shot **sexual content** from risk max / matched keywords
 - `MODERATION_SHORT_TEXT_FALLBACK_THRESHOLD`
 - `MODERATION_CACHE_SIZE`
 - `MODERATION_STARTUP_MODEL_LOAD_TIMEOUT_SECONDS`
@@ -713,6 +716,8 @@ This runs:
 
 1. backend Jest suite (**106** tests), including `src/__tests__/educational.test.js` (CDC §4.3 `educationalScore`), `dashboardService.test.js` / `dashboardRoutes.test.js` (24 tests for parent dashboard helpers, `GET /api/user/list`, and HTTP routes)
 2. AI pytest suite (including `tests/test_educational_detection.py` for educational NLI + orchestrator fusion)
+
+**Text benchmark (orchestrator, no vision):** from `ai-service/`, `py -3 evaluation/scripts/run_benchmark.py` (default `datasets/benchmark_v1.json`), or `--dataset datasets/benchmark_v3.json --report-name baseline_v3.md`. Reports include a category confusion matrix, **per-expected-category recall**, and **all** category/risk failures by default (`--max-failure-rows N` to cap the markdown table; `--export-failures reports/failures.json` for full JSON). Datasets may use camelCase or snake_case for category, risk bounds, labels, and educational fields. See `ai-service/evaluation/README.md`.
 
 Optional strict evaluation:
 
