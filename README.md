@@ -49,7 +49,7 @@ flowchart LR
 - `ai-service/`: FastAPI OCR + moderation + vision service, evaluation script, pytest tests
   - **Phase AI-07 (behavioral scoring core):** explicit contracts in `app/contracts/behavioral.py`; clinical constants in `app/services/behavioral/thresholds.py`; pure feature extraction in `feature_engineering.py`; pure scoring modules `scoring_utils.py`, `addiction_scorer.py`, `wellbeing_scorer.py`, and `scoring_orchestrator.py` for deterministic dual-score computation.
 - `demo/`: single-page HTML interface to exercise the full flow
-- `android-app/`: Flutter Android client that monitors foreground usage stats, captures the screen (MediaProjection), compresses, and uploads `POST /api/analyze` in the background — see [`android-app/README.md`](android-app/README.md) (vendored `media_projection_creator` + patched `media_projection_screenshot` for Android 14/15, including one reused `VirtualDisplay` per session for repeated `takeCapture` and explicit native `resetSession()` for re-consent recovery; captures all foreground apps except launcher/home; overlap guard; lifecycle pause/resume for battery; hourly capture cap; balanced projection auto-recovery with re-consent fallback; risk-adaptive interval via persisted worker policy; hardened handling for `Must request permission before take capture` with a short post-consent stabilization delay; manifest `FOREGROUND_SERVICE_MEDIA_PROJECTION`; scroll-safe layout when the keyboard is open).
+- `android-app/`: Flutter Android client that monitors foreground usage stats, captures the screen (MediaProjection), compresses, and uploads `POST /api/analyze` in the background — see [`android-app/README.md`](android-app/README.md) (vendored `media_projection_creator` + patched `media_projection_screenshot` for Android 14/15, including one reused `VirtualDisplay` per session for repeated `takeCapture` and explicit native `resetSession()` for re-consent recovery; captures all foreground apps except launcher/home; overlap guard; lifecycle pause/resume for battery; hourly capture cap; balanced projection auto-recovery with re-consent fallback; risk-adaptive interval via persisted worker policy; hardened handling for `Must request permission before take capture` with a short post-consent stabilization delay; backend URL is persisted/restored locally; loopback URLs are blocked on physical devices with an explicit LAN-IP warning; stale pending analyze-upload tasks are cancelled when backend URL changes; manifest `FOREGROUND_SERVICE_MEDIA_PROJECTION`; scroll-safe layout when the keyboard is open).
   - **Phase AI-07 (behavioral, coexistence mode):** added `android-app/lib/services/usage_db.dart`, `usage_tracker.dart`, and `usage_uploader.dart` for local `usage_events` SQLite buffering + periodic Workmanager upload to `/api/usage/events` with 30-day retention and graceful 404 queue preservation. Existing screenshot capture/upload flow in `main.dart` remains intact.
 - `scripts/`: cross-stack test runner (`run-all-tests.js`, `run_tests.sh`)
 - `.husky/`: pre-commit test hook
@@ -646,7 +646,7 @@ Reward display in Flutter:
 - renders:
   - global scores: `addictionScore` and `wellbeingScore`
   - both subscore families from `score.subscoresJson` (`addiction`, `wellbeing`)
-  - current recommendations and behavioral missions lists
+  - current recommendations and behavioral missions lists 
 - UX states:
   - loading strip with elapsed timer
   - explicit error panel

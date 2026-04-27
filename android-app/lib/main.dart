@@ -27,6 +27,8 @@ const String kLogFileName = 'event_log.txt';
 const String kUploadTaskName = 'uploadAnalyzeTask';
 const String kUsageEventsUploadTaskName = 'usageEventsUpload';
 const String kCapturePolicyFileName = 'capture_policy.json';
+const String kBackendConfigFileName = 'backend_config.json';
+const String kAnalyzeUploadTaskTag = 'analyze-upload';
 const int _maxCapturesPerHour = 120;
 
 /// Terminal: `flutter run` → stdout / Run tab. APK only: `adb logcat -s flutter MediaProjectionPatch`.
@@ -57,6 +59,36 @@ Future<File> _logFile() async {
 Future<File> _capturePolicyFile() async {
   final dir = await getApplicationDocumentsDirectory();
   return File('${dir.path}/$kCapturePolicyFileName');
+}
+
+Future<File> _backendConfigFile() async {
+  final dir = await getApplicationDocumentsDirectory();
+  return File('${dir.path}/$kBackendConfigFileName');
+}
+
+Future<void> _debugSessionLog({
+  required String runId,
+  required String hypothesisId,
+  required String location,
+  required String message,
+  Map<String, dynamic>? data,
+}) async {
+  try {
+    final payload = <String, dynamic>{
+      'sessionId': '2b5b41',
+      'runId': runId,
+      'hypothesisId': hypothesisId,
+      'location': location,
+      'message': message,
+      'data': data ?? <String, dynamic>{},
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+    await File('debug-2b5b41.log').writeAsString(
+      '${jsonEncode(payload)}\n',
+      mode: FileMode.append,
+      flush: true,
+    );
+  } catch (_) {}
 }
 
 Future<void> appendEventLog(String message) async {
@@ -274,6 +306,7 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
   Duration _captureInterval = const Duration(seconds: 15);
   String _logText = '';
   String _status = 'Grant permissions, then start monitoring.';
+  String? _lastPersistedBaseUrl;
 
   @override
   void initState() {
@@ -281,6 +314,7 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     WidgetsBinding.instance.addObserver(this);
     _refreshLogFromDisk();
     unawaited(_fetchLauncherPackage());
+    unawaited(_restoreBackendBaseUrl());
   }
 
   @override
@@ -678,6 +712,15 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
 
     await _traceToFile('_ensurePermissionsForStart: begin baseUrl=${_baseUrlController.text.trim()}');
 
+    final validatedBaseUrl = await _validateAndPersistBackendBaseUrl(
+      runId: 'pre-fix',
+      source: '_ensurePermissionsForStart',
+    );
+    if (validatedBaseUrl == null) {
+      return false;
+    }
+    await _cancelStaleUploadTasksIfNeeded(validatedBaseUrl, source: '_ensurePermissionsForStart');
+
     final usageOk = await UsageStats.checkUsagePermission() == true;
     if (!usageOk) {
       await _traceToFile('usage not granted → opening Settings');
@@ -713,6 +756,127 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
     _projectionRetryCount = 0;
     await _refreshPermissionMessage();
     return true;
+  }
+
+  Future<void> _restoreBackendBaseUrl() async {
+    try {
+      final f = await _backendConfigFile();
+      if (!await f.exists()) {
+        return;
+      }
+      final dynamic decoded = jsonDecode(await f.readAsString());
+      if (decoded is! Map) {
+        return;
+      }
+      final restored = decoded['baseUrl']?.toString().trim() ?? '';
+      if (restored.isEmpty) {
+        return;
+      }
+      _baseUrlController.text = restored;
+      _lastPersistedBaseUrl = restored;
+      await _traceToFile('backend URL restored: $restored');
+      // #region agent log
+      await _debugSessionLog(
+        runId: 'pre-fix',
+        hypothesisId: 'H1',
+        location: 'main.dart:_restoreBackendBaseUrl',
+        message: 'Restored persisted base URL',
+        data: <String, dynamic>{'baseUrl': restored},
+      );
+      // #endregion
+    } catch (e) {
+      await _traceToFile('backend URL restore failed: $e');
+    }
+  }
+
+  bool _isLoopbackHost(String? host) {
+    if (host == null) {
+      return false;
+    }
+    final normalized = host.toLowerCase();
+    return normalized == 'localhost' || normalized == '127.0.0.1';
+  }
+
+  Future<String?> _validateAndPersistBackendBaseUrl({
+    required String runId,
+    required String source,
+  }) async {
+    final raw = _baseUrlController.text.trim();
+    final parsed = Uri.tryParse(raw);
+    if (parsed == null || !parsed.hasScheme || parsed.host.isEmpty) {
+      await _traceToFile('backend URL rejected invalid: $raw');
+      _snack('Invalid backend URL. Example: http://192.168.x.x:3000');
+      await appendEventLog('Invalid backend URL: $raw');
+      // #region agent log
+      await _debugSessionLog(
+        runId: runId,
+        hypothesisId: 'H2',
+        location: 'main.dart:_validateAndPersistBackendBaseUrl',
+        message: 'Rejected invalid URL',
+        data: <String, dynamic>{'source': source, 'raw': raw},
+      );
+      // #endregion
+      return null;
+    }
+    if (_isLoopbackHost(parsed.host)) {
+      await _traceToFile('backend URL blocked loopback: $raw');
+      _snack('On physical device, use PC LAN IP (e.g. http://192.168.x.x:3000).');
+      await appendEventLog('Blocked loopback backend URL on device: $raw');
+      // #region agent log
+      await _debugSessionLog(
+        runId: runId,
+        hypothesisId: 'H3',
+        location: 'main.dart:_validateAndPersistBackendBaseUrl',
+        message: 'Blocked loopback URL',
+        data: <String, dynamic>{'source': source, 'host': parsed.host, 'raw': raw},
+      );
+      // #endregion
+      return null;
+    }
+
+    final normalized = raw.replaceAll(RegExp(r'/+$'), '');
+    try {
+      final f = await _backendConfigFile();
+      await f.writeAsString(
+        jsonEncode(<String, dynamic>{'baseUrl': normalized}),
+        flush: true,
+      );
+      await _traceToFile('backend URL persisted: $normalized source=$source');
+      // #region agent log
+      await _debugSessionLog(
+        runId: runId,
+        hypothesisId: 'H1',
+        location: 'main.dart:_validateAndPersistBackendBaseUrl',
+        message: 'Persisted backend URL',
+        data: <String, dynamic>{'source': source, 'baseUrl': normalized},
+      );
+      // #endregion
+    } catch (e) {
+      await _traceToFile('backend URL persist failed: $e');
+    }
+    return normalized;
+  }
+
+  Future<void> _cancelStaleUploadTasksIfNeeded(String currentBaseUrl, {required String source}) async {
+    final previous = _lastPersistedBaseUrl;
+    if (previous != null && previous == currentBaseUrl) {
+      return;
+    }
+    await Workmanager().cancelByTag(kAnalyzeUploadTaskTag);
+    await _traceToFile(
+      'cancelled stale upload tasks source=$source previous=${previous ?? "null"} current=$currentBaseUrl',
+    );
+    await appendEventLog('Cancelled stale pending upload tasks (baseUrl changed).');
+    // #region agent log
+    await _debugSessionLog(
+      runId: 'pre-fix',
+      hypothesisId: 'H4',
+      location: 'main.dart:_cancelStaleUploadTasksIfNeeded',
+      message: 'Cancelled tagged stale upload tasks',
+      data: <String, dynamic>{'source': source, 'previous': previous, 'current': currentBaseUrl},
+    );
+    // #endregion
+    _lastPersistedBaseUrl = currentBaseUrl;
   }
 
   void _snack(String message) {
@@ -895,12 +1059,19 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
       return false;
     }
 
-    final base = _baseUrlController.text.trim();
+    final base = await _validateAndPersistBackendBaseUrl(
+      runId: 'pre-fix',
+      source: '_captureCompressSchedule',
+    );
+    if (base == null) {
+      return false;
+    }
     final unique = 'upload_${DateTime.now().millisecondsSinceEpoch}';
 
     await Workmanager().registerOneOffTask(
       unique,
       kUploadTaskName,
+      tag: kAnalyzeUploadTaskTag,
       inputData: <String, dynamic>{
         'filePath': compressed.path,
         'userId': userId,
@@ -949,6 +1120,12 @@ class _MonitorHomePageState extends State<MonitorHomePage> with WidgetsBindingOb
                   hintText: 'http://10.0.2.2:3000',
                 ),
                 keyboardType: TextInputType.url,
+                onSubmitted: (_) async {
+                  await _validateAndPersistBackendBaseUrl(
+                    runId: 'pre-fix',
+                    source: 'base_url_submit',
+                  );
+                },
               ),
               const SizedBox(height: 8),
               Text(_status, style: Theme.of(context).textTheme.bodySmall),
