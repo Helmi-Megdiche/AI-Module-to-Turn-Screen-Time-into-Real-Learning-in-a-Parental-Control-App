@@ -46,7 +46,7 @@ model Mission {
   userId             Int
   mission            String
   points             Int
-   scoreSnapshotId    Int?
+    scoreSnapshotId    Int?
   triggeringSubscore String?
   triggeringValue    Float?
   targetAudience     String?

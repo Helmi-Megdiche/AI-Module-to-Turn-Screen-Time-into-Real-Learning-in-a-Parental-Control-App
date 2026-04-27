@@ -14,8 +14,10 @@ import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.contracts.behavioral import BehavioralAnalysisRequest, BehavioralAnalysisResponse
 from app.services.analysis_orchestrator import build_analyze_response_from_plain_text
 from app.services import ocr_service, vision_service
+from app.services.behavioral.scoring_orchestrator import score_behavioral_request
 from app.services.moderation_service import initialize_moderation
 from app.utils.image_utils import base64_to_pil
 
@@ -144,6 +146,46 @@ async def analyze(body: AnalyzeRequest):
         category=result.category,
         educationalScore=result.educational_score,
     )
+
+
+@app.post(
+    "/behavioral/analyze",
+    response_model=BehavioralAnalysisResponse,
+    response_model_by_alias=True,
+)
+async def behavioral_analyze(request: BehavioralAnalysisRequest):
+    """
+    Analyze behavioral usage payload and return dual scores + recommendations.
+
+    Args:
+        request: Behavioral request contract with events and summary aggregates.
+
+    Returns:
+        BehavioralAnalysisResponse: Contract-stable behavioral analysis payload.
+    """
+    try:
+        logger.info(
+            "behavioral.analyze request userId=%s window_days=%s",
+            request.user_id,
+            request.window_days,
+        )
+        response = score_behavioral_request(request)
+        logger.info(
+            "behavioral.analyze success userId=%s addiction=%.3f wellbeing=%.3f",
+            request.user_id,
+            response.addiction_score,
+            response.wellbeing_score,
+        )
+        return response
+    except ValueError as e:
+        logger.exception("Behavioral scoring validation failed")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("Behavioral scoring failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Behavioral analysis failed.",
+        ) from e
 
 
 @app.get("/health")

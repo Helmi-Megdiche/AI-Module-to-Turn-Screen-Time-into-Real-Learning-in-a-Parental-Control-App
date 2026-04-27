@@ -45,9 +45,12 @@ flowchart LR
 ## 3) Repository Structure
 
 - `backend/`: Express API, business logic, Prisma schema/migrations/seed, Jest tests
+  - **Phase AI-07 (behavioral ingestion + integration, backend):** additive Prisma models `UsageEvent`, `BehavioralScore`, `Recommendation`; endpoints `POST /api/usage/events`, `POST /api/user/:id/behavioral/analyze`, `GET /api/user/:id/wellbeing`, `GET /api/user/:id/recommendations`, `GET /api/user/:id/recommendations/current`, `POST /api/user/:id/recommendations/:recId/dismiss`, `POST /api/user/:id/recommendations/:recId/acted`; ownership guard + manual validators for behavioral routes.
 - `ai-service/`: FastAPI OCR + moderation + vision service, evaluation script, pytest tests
+  - **Phase AI-07 (behavioral scoring core):** explicit contracts in `app/contracts/behavioral.py`; clinical constants in `app/services/behavioral/thresholds.py`; pure feature extraction in `feature_engineering.py`; pure scoring modules `scoring_utils.py`, `addiction_scorer.py`, `wellbeing_scorer.py`, and `scoring_orchestrator.py` for deterministic dual-score computation.
 - `demo/`: single-page HTML interface to exercise the full flow
 - `android-app/`: Flutter Android client that monitors foreground usage stats, captures the screen (MediaProjection), compresses, and uploads `POST /api/analyze` in the background — see [`android-app/README.md`](android-app/README.md) (vendored `media_projection_creator` + patched `media_projection_screenshot` for Android 14/15, including one reused `VirtualDisplay` per session for repeated `takeCapture` and explicit native `resetSession()` for re-consent recovery; captures all foreground apps except launcher/home; overlap guard; lifecycle pause/resume for battery; hourly capture cap; balanced projection auto-recovery with re-consent fallback; risk-adaptive interval via persisted worker policy; hardened handling for `Must request permission before take capture` with a short post-consent stabilization delay; manifest `FOREGROUND_SERVICE_MEDIA_PROJECTION`; scroll-safe layout when the keyboard is open).
+  - **Phase AI-07 (behavioral, coexistence mode):** added `android-app/lib/services/usage_db.dart`, `usage_tracker.dart`, and `usage_uploader.dart` for local `usage_events` SQLite buffering + periodic Workmanager upload to `/api/usage/events` with 30-day retention and graceful 404 queue preservation. Existing screenshot capture/upload flow in `main.dart` remains intact.
 - `scripts/`: cross-stack test runner (`run-all-tests.js`, `run_tests.sh`)
 - `.husky/`: pre-commit test hook
 
@@ -430,6 +433,49 @@ Main file: `ai-service/app/services/analysis_orchestrator.py`
 - category mapped from final risk using configured thresholds, except **RULE A** above
 - optional log when dialect matches: `[DialectDetection] matches=[...]`
 
+### 6.8 Behavioral Intelligence scoring core (AI-07, Phase 4)
+
+Main files under `ai-service/app/services/behavioral/`:
+
+- `scoring_utils.py`:
+  - shared saturating mapping `1 - exp(-k*x/inflection)` for smooth monotone normalization (current default `steepness=0.5` for clinically softer calibration near threshold)
+  - `inverse_score` for harm-to-wellness conversion
+  - `weighted_global` for deterministic weighted aggregation (rounded to 3 decimals)
+- `addiction_scorer.py`:
+  - computes 5 subscores (`intensity`, `compulsivity`, `nocturnal`, `escalation`, `imbalance`) + global addiction score
+  - uses age-aware thresholding (`get_age_screen_threshold`) and clinical constants from `thresholds.py`
+- `wellbeing_scorer.py`:
+  - computes 5 subscores (`screen_balance`, `content_quality`, `real_activity`, `sleep`, `family_interaction`) + global wellbeing score
+  - `real_activity` is driven by mission completion rate (proxy of real-world engagement outside screen use)
+  - `family_interaction` proxy is derived from mission summary: `0.7 * mission_completion_rate + 0.3 * min(1.0, assigned/5.0)`
+- `scoring_orchestrator.py`:
+  - applies locked 7-day aggregation policy: daily usage features are computed per day then averaged over `window_days`; `weekly_usage_slope` is used as-is; content/mission summary ratios are consumed as-is
+  - slope semantics for insufficient history are conservative: when previous-week usage is zero, slope returns `0.0` (no trend inference for fresh users)
+  - builds `BehavioralAnalysisResponse` contract (`addictionScore`, `wellbeingScore`, subscore lists, `windowDays`, `computedAt`, `recommendations`)
+  - explicitly documents why addiction vs wellbeing are complementary (shared protective signals but distinct risk sensitivities).
+- `recommendation_engine.py`:
+  - deterministic rule engine mapping subscore thresholds to structured parent/child recommendations
+  - emits ordered severities (`high` → `medium` → `low` → optional `positive`)
+  - calibrated Phase 6b trigger boundaries for better clinical sensitivity: `session_break` (compulsivity > 0.5), `daily_limit_reminder` (intensity > 0.55), `balance_celebration` (wellbeing > 0.70)
+  - celebration recommendation is gated: only when no high-severity alert is active
+  - language guard: recommendations are French and avoid stigmatizing vocabulary.
+- `POST /behavioral/analyze` (AI-07, Phase 7a):
+  - exposes behavioral scoring as a stateless FastAPI endpoint using existing contracts (`BehavioralAnalysisRequest` → `BehavioralAnalysisResponse`)
+  - returns camelCase payloads over HTTP (`response_model_by_alias=True`) for Node backend compatibility
+  - mirrors `/analyze` error strategy with explicit `400` on scoring `ValueError` and generic `500` fallback without leaking internals
+- `backend/src/services/aiBehavioralClient.js` + behavioral compute route (AI-07, Phase 7b):
+  - dedicated backend HTTP client to `AI_BEHAVIORAL_URL` (`AI_BEHAVIORAL_TIMEOUT_MS=10000` default) for `/behavioral/analyze`
+  - maps AI failures to explicit backend semantics (`ai_validation` 400, `ai_failure` 502, `ai_unreachable` 503)
+  - normalizes outgoing usage-event timestamps to timezone-naive ISO strings for compatibility with the current AI feature-engineering datetime arithmetic
+  - persists each run as a score snapshot (`BehavioralScore`) and stores top-3 ranked recommendations linked via `scoreSnapshotId`
+  - latest-only retrieval path (`GET /api/user/:id/recommendations/current`) returns active recommendations tied to newest snapshot only
+- `evaluation/behavioral/` (AI-07, Phase 6a):
+  - deterministic synthetic-profile benchmark scaffold (`datasets/behavioral_profiles_v1.json`) with 15 configurable profiles (14-day windows)
+  - Phase 6b profile sharpening applied on escalation/compulsivity archetypes (`heavy_escalating_12yo`, `compulsive_user_10yo`, `social_media_heavy_14yo`, `rising_concern_9yo`) and recommendation expectation alignment (`educational_focused_9yo`, `sleep_deprived_10yo`)
+  - pure generator (`scripts/synthetic_profile.py`) using `random.Random(seed)` only, with fixed reference end date (`2026-04-20`) for bit-for-bit reproducibility
+  - calibration helper (`scripts/calibrate_profiles.py`) injects `expected_addiction_range` / `expected_wellbeing_range` from empirical actuals with configurable tolerance (default ±0.08)
+  - benchmark runner (`scripts/run_behavioral_benchmark.py`) supports `--assert-ranges` and produces a jury-ready baseline report with score-range checks + recommendation-set diagnostics (`required ⊆ actual`, `forbidden ∩ actual = ∅`)
+
 ## 7) Database Schema Summary
 
 Defined in `backend/prisma/schema.prisma`.
@@ -714,10 +760,16 @@ node scripts/run-all-tests.js
 
 This runs:
 
-1. backend Jest suite (**106** tests), including `src/__tests__/educational.test.js` (CDC §4.3 `educationalScore`), `dashboardService.test.js` / `dashboardRoutes.test.js` (24 tests for parent dashboard helpers, `GET /api/user/list`, and HTTP routes)
-2. AI pytest suite (including `tests/test_educational_detection.py` for educational NLI + orchestrator fusion)
+1. backend Jest suite (**125** tests), including `src/__tests__/educational.test.js` (CDC §4.3 `educationalScore`), `dashboardService.test.js` / `dashboardRoutes.test.js` (24 tests for parent dashboard helpers, `GET /api/user/list`, and HTTP routes)
+2. AI pytest suite (including `tests/test_educational_detection.py` for educational NLI + orchestrator fusion, plus `tests/behavioral/` contracts + feature engineering + scoring modules for AI-07)
 
 **Text benchmark (orchestrator, no vision):** from `ai-service/`, `py -3 evaluation/scripts/run_benchmark.py` (default `datasets/benchmark_v1.json`), or `--dataset datasets/benchmark_v3.json --report-name baseline_v3.md`. Reports include a category confusion matrix, **per-expected-category recall**, and **all** category/risk failures by default (`--max-failure-rows N` to cap the markdown table; `--export-failures reports/failures.json` for full JSON). Datasets may use camelCase or snake_case for category, risk bounds, labels, and educational fields. See `ai-service/evaluation/README.md`.
+
+**Behavioral benchmark (AI-07 Phase 6a):** from `ai-service/`, run `.\.venv\Scripts\python.exe -m evaluation.behavioral.scripts.run_behavioral_benchmark --profiles evaluation/behavioral/datasets/behavioral_profiles_v1.json --report-name first_run_actuals.md --export-actuals evaluation/behavioral/reports/first_run_actuals.json`. This first pass reports empirical actuals and recommendation-set checks only; score ranges are intentionally deferred to Phase 6b calibration.
+
+**Behavioral calibration + baseline lock (AI-07 Phase 6b):**
+- `.\.venv\Scripts\python.exe -m evaluation.behavioral.scripts.calibrate_profiles --profiles evaluation/behavioral/datasets/behavioral_profiles_v1.json --actuals evaluation/behavioral/reports/second_run_actuals.json --tolerance 0.08`
+- `.\.venv\Scripts\python.exe -m evaluation.behavioral.scripts.run_behavioral_benchmark --profiles evaluation/behavioral/datasets/behavioral_profiles_v1.json --report-name behavioral_baseline_v1.md --assert-ranges --export-actuals evaluation/behavioral/reports/behavioral_baseline_v1.json`
 
 Optional strict evaluation:
 
