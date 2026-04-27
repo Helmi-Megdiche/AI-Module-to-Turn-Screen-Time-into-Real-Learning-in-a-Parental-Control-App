@@ -388,6 +388,35 @@
       color: var(--muted);
       font-size: 0.78rem;
     }
+    .wellbeing-score-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 0.9rem;
+    }
+    .wellbeing-lists {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: 0.9rem;
+    }
+    @media (max-width: 780px) { .wellbeing-lists { grid-template-columns: 1fr; } }
+    .wellbeing-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .wellbeing-list li {
+      border-bottom: 1px solid var(--border);
+      padding: 0.55rem 0;
+      font-size: 0.86rem;
+    }
+    .wellbeing-list li:last-child { border-bottom: none; }
+    .wellbeing-empty {
+      margin: 0.25rem 0 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
     /* Ensure interactive game widget text remains readable on light surfaces */
     #gameWidget {
       background: #f8f9fa !important;
@@ -537,6 +566,7 @@
       <button class="tab-button" type="button" data-tab="summary">Summary</button>
       <button class="tab-button" type="button" data-tab="badges">Badges</button>
       <button class="tab-button" type="button" data-tab="history">History</button>
+      <button class="tab-button" type="button" data-tab="wellbeing">Wellbeing</button>
       <button class="tab-button" type="button" data-tab="parent-missions">Parent: Missions</button>
       <button class="tab-button" type="button" data-tab="profile">Profile</button>
       <button class="tab-button" type="button" data-tab="dashboard">Dashboard</button>
@@ -692,9 +722,68 @@
     </section>
     </div>
 
+    <div id="wellbeing" class="tab-content">
+      <section>
+        <h2>5 · Wellbeing</h2>
+        <p class="muted" style="margin-top:0">
+          Runs behavioral scoring for the current user, then loads current recommendations and behavioral missions.
+        </p>
+        <div class="actions">
+          <button type="button" class="secondary" id="btnWellbeing">
+            <span class="btn-label">Analyze wellbeing</span>
+            <span class="btn-spinner" hidden aria-hidden="true"></span>
+          </button>
+        </div>
+        <div id="wellbeingLoad" class="load-panel" role="status" aria-live="polite" aria-hidden="true">
+          <div class="load-spinner" aria-hidden="true"></div>
+          <div>
+            <strong>Loading wellbeing data… <span class="elapsed" id="wellbeingElapsed">0s</span></strong>
+            <p>Calling behavioral analyze, then refreshing current recommendations and missions.</p>
+          </div>
+        </div>
+        <div id="wellbeingErr" class="err" hidden></div>
+        <div id="wellbeingOut" style="margin-top:1rem" hidden>
+          <div class="wellbeing-score-grid">
+            <div class="card">
+              <strong>Addiction Score</strong><br />
+              <span id="wellAddictionScore" class="metric-main">—</span>
+            </div>
+            <div class="card">
+              <strong>Digital Wellbeing Score</strong><br />
+              <span id="wellWellbeingScore" class="metric-main">—</span>
+            </div>
+          </div>
+          <div class="wellbeing-lists">
+            <div class="card">
+              <strong>Addiction subscores</strong>
+              <ul id="wellAddictionSubscores" class="wellbeing-list"></ul>
+              <p id="wellAddictionSubscoresEmpty" class="wellbeing-empty" hidden>No addiction subscores available.</p>
+            </div>
+            <div class="card">
+              <strong>Wellbeing subscores</strong>
+              <ul id="wellWellbeingSubscores" class="wellbeing-list"></ul>
+              <p id="wellWellbeingSubscoresEmpty" class="wellbeing-empty" hidden>No wellbeing subscores available.</p>
+            </div>
+          </div>
+          <div class="wellbeing-lists">
+            <div class="card">
+              <strong>Current recommendations</strong>
+              <ul id="wellRecommendations" class="wellbeing-list"></ul>
+              <p id="wellRecommendationsEmpty" class="wellbeing-empty" hidden>No current recommendations for this user.</p>
+            </div>
+            <div class="card">
+              <strong>Current behavioral missions</strong>
+              <ul id="wellMissions" class="wellbeing-list"></ul>
+              <p id="wellMissionsEmpty" class="wellbeing-empty" hidden>No pending behavioral missions for this user.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
     <div id="parent-missions" class="tab-content">
       <section>
-        <h2>5 · Parent: Missions</h2>
+        <h2>6 · Parent: Missions</h2>
         <div class="row">
           <div>
             <label for="parentUserId">User ID</label>
@@ -718,7 +807,7 @@
 
     <div id="profile" class="tab-content">
       <section>
-        <h2>6 · Profile</h2>
+        <h2>7 · Profile</h2>
         <p class="muted" style="margin-top:0">Set interests to drive personalized mission type selection.</p>
         <div class="row">
           <div>
@@ -739,7 +828,7 @@
 
     <div id="dashboard" class="tab-content">
       <section>
-        <h2>7 · Parent dashboard</h2>
+        <h2>8 · Parent dashboard</h2>
         <p class="muted" style="margin-top:0">Aggregates from <code>GET /api/user/:id/dashboard</code> and <code>GET /api/user/:id/risk-series</code>. Pick any seeded user from the list.</p>
         <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:1rem">
           <div>
@@ -876,6 +965,7 @@
       "btnSummary",
       "btnBadges",
       "btnHistory",
+      "btnWellbeing",
       "btnLoadMissions",
       "btnLoadProfile",
       "btnLoadDashboard",
@@ -1156,6 +1246,170 @@
     }
 
     $("btnLoadDashboard").addEventListener("click", () => loadDashboard());
+
+    // === Wellbeing behavioral flow ===
+
+    function toPercent01(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return "—";
+      return (n * 100).toFixed(1) + "%";
+    }
+
+    function renderWellbeingSubscores(listId, emptyId, subscores) {
+      const listEl = $(listId);
+      const emptyEl = $(emptyId);
+      listEl.innerHTML = "";
+      const rows = Array.isArray(subscores) ? subscores : [];
+      if (!rows.length) {
+        emptyEl.hidden = false;
+        return;
+      }
+      emptyEl.hidden = true;
+      rows.forEach((sub) => {
+        const li = document.createElement("li");
+        const name = escapeHtml(String(sub?.name || "subscore"));
+        const value = toPercent01(sub?.value);
+        const explain = escapeHtml(String(sub?.explanationFr || ""));
+        li.innerHTML =
+          "<strong>" +
+          name +
+          "</strong> · " +
+          value +
+          (explain ? '<br /><span class="muted">' + explain + "</span>" : "");
+        listEl.appendChild(li);
+      });
+    }
+
+    function renderWellbeingRecommendations(items) {
+      const listEl = $("wellRecommendations");
+      const emptyEl = $("wellRecommendationsEmpty");
+      listEl.innerHTML = "";
+      const rows = Array.isArray(items) ? items : [];
+      if (!rows.length) {
+        emptyEl.hidden = false;
+        return;
+      }
+      emptyEl.hidden = true;
+      rows.forEach((rec) => {
+        const li = document.createElement("li");
+        const sev = escapeHtml(String(rec?.severity || "—"));
+        const type = escapeHtml(String(rec?.type || "—"));
+        const msg = escapeHtml(String(rec?.messageFr || rec?.message_fr || ""));
+        li.innerHTML =
+          "<strong>" +
+          type +
+          "</strong> · " +
+          sev +
+          (msg ? '<br /><span class="muted">' + msg + "</span>" : "");
+        listEl.appendChild(li);
+      });
+    }
+
+    function renderWellbeingMissions(items) {
+      const listEl = $("wellMissions");
+      const emptyEl = $("wellMissionsEmpty");
+      listEl.innerHTML = "";
+      const rows = Array.isArray(items) ? items : [];
+      if (!rows.length) {
+        emptyEl.hidden = false;
+        return;
+      }
+      emptyEl.hidden = true;
+      rows.forEach((mission) => {
+        const li = document.createElement("li");
+        const text = escapeHtml(String(mission?.mission || "Mission"));
+        const pts = Number(mission?.points || 0);
+        const status = escapeHtml(String(mission?.status || "pending"));
+        li.innerHTML =
+          "<strong>" +
+          text +
+          "</strong> · +" +
+          pts +
+          " pts · " +
+          status;
+        listEl.appendChild(li);
+      });
+    }
+
+    function renderWellbeingPanel(score, recommendations, missions) {
+      const addiction = Number(score?.addictionScore);
+      const wellbeing = Number(score?.wellbeingScore);
+      $("wellAddictionScore").textContent = Number.isFinite(addiction) ? toPercent01(addiction) : "—";
+      $("wellWellbeingScore").textContent = Number.isFinite(wellbeing) ? toPercent01(wellbeing) : "—";
+      const subs = score?.subscoresJson || {};
+      renderWellbeingSubscores("wellAddictionSubscores", "wellAddictionSubscoresEmpty", subs.addiction);
+      renderWellbeingSubscores("wellWellbeingSubscores", "wellWellbeingSubscoresEmpty", subs.wellbeing);
+      renderWellbeingRecommendations(recommendations);
+      renderWellbeingMissions(missions);
+      $("wellbeingOut").hidden = false;
+    }
+
+    async function loadWellbeing() {
+      showErr($("wellbeingErr"), "");
+      $("wellbeingOut").hidden = true;
+      $("wellbeingElapsed").textContent = "0s";
+      setActionsDisabled(true);
+      setButtonLoading("btnWellbeing", true, "Loading…", "Analyze wellbeing");
+      showLoadPanel("wellbeingLoad", true);
+      const stopElapsed = startElapsed("wellbeingElapsed");
+      try {
+        const userId = uid();
+        const ageYears = ageVal();
+        if (!Number.isFinite(userId) || userId <= 0) {
+          showErr($("wellbeingErr"), "Please enter a valid User ID in Connection.");
+          return;
+        }
+        if (!Number.isFinite(ageYears) || ageYears < 2 || ageYears > 25) {
+          showErr($("wellbeingErr"), "Age must be between 2 and 25 for behavioral analysis.");
+          return;
+        }
+        const base = apiBase();
+        const analyzeRes = await fetch(
+          base + "/api/user/" + userId + "/behavioral/analyze",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ageYears, windowDays: 14 }),
+          }
+        );
+        const analyzeBody = await readJsonSafe(analyzeRes);
+        if (!analyzeRes.ok) {
+          showErr($("wellbeingErr"), analyzeBody.message || analyzeBody.error || "Behavioral analyze failed.");
+          return;
+        }
+
+        const [recRes, missionRes] = await Promise.all([
+          fetch(base + "/api/user/" + userId + "/recommendations/current"),
+          fetch(base + "/api/user/" + userId + "/missions/current"),
+        ]);
+        const recBody = await readJsonSafe(recRes);
+        const missionBody = await readJsonSafe(missionRes);
+        if (!recRes.ok) {
+          showErr($("wellbeingErr"), recBody.message || recBody.error || "Failed to load current recommendations.");
+          return;
+        }
+        if (!missionRes.ok) {
+          showErr($("wellbeingErr"), missionBody.message || missionBody.error || "Failed to load current missions.");
+          return;
+        }
+
+        const score = analyzeBody?.score || null;
+        if (!score) {
+          showErr($("wellbeingErr"), "No behavioral score snapshot returned by analyze endpoint.");
+          return;
+        }
+        renderWellbeingPanel(score, recBody, missionBody);
+      } catch (err) {
+        showErr($("wellbeingErr"), err.message || String(err));
+      } finally {
+        stopElapsed();
+        showLoadPanel("wellbeingLoad", false);
+        setButtonLoading("btnWellbeing", false, "Loading…", "Analyze wellbeing");
+        setActionsDisabled(false);
+      }
+    }
+
+    $("btnWellbeing").addEventListener("click", () => loadWellbeing());
 
     // === Interactive mission widget helpers ===
 

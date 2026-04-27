@@ -635,6 +635,26 @@ Reward display in Flutter:
 - purpose:
   - exposes personalization inputs in the demo without altering mission-generation logic
 
+### 8.1.4 Demo wellbeing tab (behavioral intelligence snapshot)
+
+- file: `demo/index.html` (`Wellbeing` tab)
+- adds a dedicated parent-friendly view for AI-07 outputs without changing Flutter UI
+- **Analyze wellbeing** performs:
+  - `POST /api/user/:id/behavioral/analyze` (creates/refreshes latest behavioral snapshot)
+  - `GET /api/user/:id/recommendations/current` (current active recommendations for latest snapshot)
+  - `GET /api/user/:id/missions/current` (current pending behavioral missions only)
+- renders:
+  - global scores: `addictionScore` and `wellbeingScore`
+  - both subscore families from `score.subscoresJson` (`addiction`, `wellbeing`)
+  - current recommendations and behavioral missions lists
+- UX states:
+  - loading strip with elapsed timer
+  - explicit error panel
+  - explicit empty-state messages per list (subscores/recommendations/missions)
+- isolation guarantees:
+  - does not alter existing `/api/user/:id/missions` tab behavior
+  - behavioral missions stay scoped to `/missions/current` in this tab
+
 ### 8.2 AI API (`http://127.0.0.1:8000`)
 
 - `GET /health`
