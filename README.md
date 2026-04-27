@@ -654,6 +654,7 @@ Reward display in Flutter:
 - isolation guarantees:
   - does not alter existing `/api/user/:id/missions` tab behavior
   - behavioral missions stay scoped to `/missions/current` in this tab
+- release note: Phone E2E restore: URL drift + loopback + stale task safeguards.
 
 ### 8.2 AI API (`http://127.0.0.1:8000`)
 
