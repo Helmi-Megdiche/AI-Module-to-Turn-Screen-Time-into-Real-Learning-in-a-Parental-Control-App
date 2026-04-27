@@ -17,12 +17,15 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:usage_stats/usage_stats.dart';
 import 'package:workmanager/workmanager.dart';
+import 'package:android_capture/services/usage_tracker.dart';
+import 'package:android_capture/services/usage_uploader.dart';
 
 /// Android [UsageEvents.Event.MOVE_TO_FOREGROUND](https://developer.android.com/reference/android/app/usage/UsageEvents.Event#MOVE_TO_FOREGROUND).
 const String _kMoveToForeground = '1';
 
 const String kLogFileName = 'event_log.txt';
 const String kUploadTaskName = 'uploadAnalyzeTask';
+const String kUsageEventsUploadTaskName = 'usageEventsUpload';
 const String kCapturePolicyFileName = 'capture_policy.json';
 const int _maxCapturesPerHour = 120;
 
@@ -103,6 +106,13 @@ void callbackDispatcher() {
     DartPluginRegistrant.ensureInitialized();
 
     await _traceToFile('Workmanager task=$task keys=${inputData?.keys.toList()}');
+
+    if (task == kUsageEventsUploadTaskName) {
+      return UsageUploader.runUploadTask(
+        inputData: inputData,
+        onLog: (message) => _traceToFile(message),
+      );
+    }
 
     if (task != kUploadTaskName || inputData == null) {
       await _traceToFile('Workmanager skip: wrong task or null data');
@@ -210,6 +220,8 @@ Future<void> main() async {
     callbackDispatcher,
     isInDebugMode: kDebugMode,
   );
+  await UsageUploader.registerPeriodicTask();
+  UsageTracker.start();
   _trace('main(): runApp');
   runApp(const ParentalMonitorApp());
 }

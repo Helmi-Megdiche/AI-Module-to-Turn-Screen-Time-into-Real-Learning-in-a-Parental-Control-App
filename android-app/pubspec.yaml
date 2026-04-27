@@ -40,6 +40,8 @@ dependencies:
   flutter_image_compress: ^2.0.0
   workmanager: ^0.7.0
   path_provider: ^2.1.0
+  path: ^1.8.0
+  sqflite: ^2.3.0
   device_apps: ^2.2.0
 
 dependency_overrides:
@@ -51,6 +53,7 @@ dependency_overrides:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  sqflite_common_ffi: ^2.3.3
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
