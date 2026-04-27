@@ -1,0 +1,701 @@
+[
+  {
+    "id": "balanced_child_8yo",
+    "age_years": 8,
+    "seed": 101,
+    "description_fr": "Enfant équilibré, 1h d'écran par jour, missions assidues, contenu éducatif",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 65,
+      "daily_minutes_growth_per_day": 0.0,
+      "sessions_per_day": 2,
+      "short_session_fraction": 0.05,
+      "unlocks_per_day": 8,
+      "nocturnal_minutes_per_day": 0,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 40,
+      "risky_count": 5,
+      "dangerous_count": 0,
+      "total": 50
+    },
+    "mission_summary": {
+      "completed": 8,
+      "assigned": 10
+    },
+    "required_recommendations": [
+      "balance_celebration"
+    ],
+    "forbidden_recommendations": [
+      "screen_curfew",
+      "weekly_escalation_alert",
+      "daily_limit_reminder",
+      "session_break"
+    ],
+    "expected_addiction_range": [
+      0.013,
+      0.173
+    ],
+    "expected_wellbeing_range": [
+      0.762,
+      0.922
+    ],
+    "expected_missions": []
+  },
+  {
+    "id": "heavy_escalating_12yo",
+    "age_years": 12,
+    "seed": 102,
+    "description_fr": "Usage intensif avec hausse hebdomadaire marquée",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 90,
+      "daily_minutes_growth_per_day": 7.0,
+      "sessions_per_day": 5,
+      "short_session_fraction": 0.15,
+      "unlocks_per_day": 40,
+      "nocturnal_minutes_per_day": 10,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 10,
+      "risky_count": 15,
+      "dangerous_count": 5,
+      "total": 40
+    },
+    "mission_summary": {
+      "completed": 3,
+      "assigned": 10
+    },
+    "required_recommendations": [
+      "weekly_escalation_alert"
+    ],
+    "forbidden_recommendations": [
+      "balance_celebration"
+    ],
+    "expected_addiction_range": [
+      0.324,
+      0.484
+    ],
+    "expected_wellbeing_range": [
+      0.397,
+      0.557
+    ],
+    "expected_missions": [
+      "content_quality",
+      "real_activity"
+    ]
+  },
+  {
+    "id": "nocturnal_teen_15yo",
+    "age_years": 15,
+    "seed": 103,
+    "description_fr": "Adolescent avec usage nocturne prolongé",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 170,
+      "daily_minutes_growth_per_day": 0.0,
+      "sessions_per_day": 4,
+      "short_session_fraction": 0.1,
+      "unlocks_per_day": 30,
+      "nocturnal_minutes_per_day": 80,
+      "active_hours": [
+        14,
+        23
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 5,
+      "risky_count": 20,
+      "dangerous_count": 10,
+      "total": 50
+    },
+    "mission_summary": {
+      "completed": 4,
+      "assigned": 10
+    },
+    "required_recommendations": [
+      "screen_curfew"
+    ],
+    "forbidden_recommendations": [
+      "balance_celebration"
+    ],
+    "expected_addiction_range": [
+      0.345,
+      0.505
+    ],
+    "expected_wellbeing_range": [
+      0.246,
+      0.406
+    ],
+    "expected_missions": [
+      "nocturnal"
+    ]
+  },
+  {
+    "id": "compulsive_user_10yo",
+    "age_years": 10,
+    "seed": 104,
+    "description_fr": "Usage compulsif: sessions courtes très fréquentes",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 120,
+      "daily_minutes_growth_per_day": 0.0,
+      "sessions_per_day": 120,
+      "short_session_fraction": 0.85,
+      "unlocks_per_day": 200,
+      "nocturnal_minutes_per_day": 5,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 10,
+      "risky_count": 10,
+      "dangerous_count": 3,
+      "total": 40
+    },
+    "mission_summary": {
+      "completed": 5,
+      "assigned": 10
+    },
+    "required_recommendations": [
+      "session_break"
+    ],
+    "forbidden_recommendations": [
+      "balance_celebration"
+    ],
+    "expected_addiction_range": [
+      0.264,
+      0.424
+    ],
+    "expected_wellbeing_range": [
+      0.483,
+      0.643
+    ],
+    "expected_missions": [
+      "compulsivity"
+    ]
+  },
+  {
+    "id": "educational_focused_9yo",
+    "age_years": 9,
+    "seed": 105,
+    "description_fr": "Temps d'écran élevé mais contenu essentiellement éducatif",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 150,
+      "daily_minutes_growth_per_day": 0.0,
+      "sessions_per_day": 3,
+      "short_session_fraction": 0.05,
+      "unlocks_per_day": 10,
+      "nocturnal_minutes_per_day": 0,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 45,
+      "risky_count": 3,
+      "dangerous_count": 0,
+      "total": 50
+    },
+    "mission_summary": {
+      "completed": 7,
+      "assigned": 10
+    },
+    "required_recommendations": [],
+    "forbidden_recommendations": [
+      "screen_curfew",
+      "educational_boost"
+    ],
+    "expected_addiction_range": [
+      0.072,
+      0.232
+    ],
+    "expected_wellbeing_range": [
+      0.711,
+      0.871
+    ],
+    "expected_missions": []
+  },
+  {
+    "id": "moderate_family_7yo",
+    "age_years": 7,
+    "seed": 106,
+    "description_fr": "Usage modéré avec forte implication familiale",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 80,
+      "daily_minutes_growth_per_day": 0.0,
+      "sessions_per_day": 2,
+      "short_session_fraction": 0.05,
+      "unlocks_per_day": 6,
+      "nocturnal_minutes_per_day": 0,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 25,
+      "risky_count": 5,
+      "dangerous_count": 0,
+      "total": 35
+    },
+    "mission_summary": {
+      "completed": 9,
+      "assigned": 10
+    },
+    "required_recommendations": [
+      "balance_celebration"
+    ],
+    "forbidden_recommendations": [
+      "screen_curfew",
+      "daily_limit_reminder"
+    ],
+    "expected_addiction_range": [
+      0.023,
+      0.183
+    ],
+    "expected_wellbeing_range": [
+      0.761,
+      0.921
+    ],
+    "expected_missions": []
+  },
+  {
+    "id": "weekend_spike_11yo",
+    "age_years": 11,
+    "seed": 107,
+    "description_fr": "Semaine calme, pics d'usage le week-end",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 60,
+      "daily_minutes_growth_per_day": 0.0,
+      "sessions_per_day": 3,
+      "short_session_fraction": 0.1,
+      "unlocks_per_day": 15,
+      "nocturnal_minutes_per_day": 0,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 3.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 15,
+      "risky_count": 10,
+      "dangerous_count": 2,
+      "total": 35
+    },
+    "mission_summary": {
+      "completed": 6,
+      "assigned": 10
+    },
+    "required_recommendations": [],
+    "forbidden_recommendations": [
+      "screen_curfew"
+    ],
+    "expected_addiction_range": [
+      0.081,
+      0.241
+    ],
+    "expected_wellbeing_range": [
+      0.59,
+      0.75
+    ],
+    "expected_missions": []
+  },
+  {
+    "id": "social_media_heavy_14yo",
+    "age_years": 14,
+    "seed": 108,
+    "description_fr": "Usage intense d'applications sociales, nombreuses ouvertures courtes",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 300,
+      "daily_minutes_growth_per_day": 0.0,
+      "sessions_per_day": 70,
+      "short_session_fraction": 0.65,
+      "unlocks_per_day": 150,
+      "nocturnal_minutes_per_day": 25,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 3,
+      "risky_count": 25,
+      "dangerous_count": 10,
+      "total": 45
+    },
+    "mission_summary": {
+      "completed": 2,
+      "assigned": 10
+    },
+    "required_recommendations": [
+      "session_break",
+      "imbalance_warning"
+    ],
+    "forbidden_recommendations": [
+      "balance_celebration"
+    ],
+    "expected_addiction_range": [
+      0.371,
+      0.531
+    ],
+    "expected_wellbeing_range": [
+      0.256,
+      0.416
+    ],
+    "expected_missions": [
+      "content_quality",
+      "real_activity"
+    ]
+  },
+  {
+    "id": "post_intervention_recovering_13yo",
+    "age_years": 13,
+    "seed": 109,
+    "description_fr": "Enfant en phase de diminution d'usage après intervention parentale",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 200,
+      "daily_minutes_growth_per_day": -5.0,
+      "sessions_per_day": 3,
+      "short_session_fraction": 0.1,
+      "unlocks_per_day": 20,
+      "nocturnal_minutes_per_day": 5,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 20,
+      "risky_count": 10,
+      "dangerous_count": 2,
+      "total": 40
+    },
+    "mission_summary": {
+      "completed": 6,
+      "assigned": 10
+    },
+    "required_recommendations": [],
+    "forbidden_recommendations": [
+      "weekly_escalation_alert",
+      "balance_celebration"
+    ],
+    "expected_addiction_range": [
+      0.107,
+      0.267
+    ],
+    "expected_wellbeing_range": [
+      0.581,
+      0.741
+    ],
+    "expected_missions": []
+  },
+  {
+    "id": "sleep_deprived_10yo",
+    "age_years": 10,
+    "seed": 110,
+    "description_fr": "Usage nocturne marqué impactant le sommeil",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 150,
+      "daily_minutes_growth_per_day": 0.0,
+      "sessions_per_day": 3,
+      "short_session_fraction": 0.1,
+      "unlocks_per_day": 18,
+      "nocturnal_minutes_per_day": 110,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 8,
+      "risky_count": 12,
+      "dangerous_count": 3,
+      "total": 35
+    },
+    "mission_summary": {
+      "completed": 3,
+      "assigned": 10
+    },
+    "required_recommendations": [
+      "screen_curfew",
+      "daily_limit_reminder"
+    ],
+    "forbidden_recommendations": [
+      "balance_celebration"
+    ],
+    "expected_addiction_range": [
+      0.388,
+      0.548
+    ],
+    "expected_wellbeing_range": [
+      0.215,
+      0.375
+    ],
+    "expected_missions": [
+      "nocturnal"
+    ]
+  },
+  {
+    "id": "low_engagement_8yo",
+    "age_years": 8,
+    "seed": 111,
+    "description_fr": "Peu d'écran mais aucun engagement mission/éducatif",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 35,
+      "daily_minutes_growth_per_day": 0.0,
+      "sessions_per_day": 1,
+      "short_session_fraction": 0.0,
+      "unlocks_per_day": 4,
+      "nocturnal_minutes_per_day": 0,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 1,
+      "risky_count": 0,
+      "dangerous_count": 0,
+      "total": 10
+    },
+    "mission_summary": {
+      "completed": 0,
+      "assigned": 5
+    },
+    "required_recommendations": [
+      "real_activity_prompt"
+    ],
+    "forbidden_recommendations": [
+      "screen_curfew",
+      "balance_celebration"
+    ],
+    "expected_addiction_range": [
+      0.098,
+      0.258
+    ],
+    "expected_wellbeing_range": [
+      0.363,
+      0.523
+    ],
+    "expected_missions": [
+      "real_activity"
+    ]
+  },
+  {
+    "id": "balanced_teen_16yo",
+    "age_years": 16,
+    "seed": 112,
+    "description_fr": "Adolescent équilibré, usage adapté à la tranche adolescente",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 150,
+      "daily_minutes_growth_per_day": 0.0,
+      "sessions_per_day": 3,
+      "short_session_fraction": 0.08,
+      "unlocks_per_day": 18,
+      "nocturnal_minutes_per_day": 0,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 25,
+      "risky_count": 5,
+      "dangerous_count": 0,
+      "total": 40
+    },
+    "mission_summary": {
+      "completed": 7,
+      "assigned": 10
+    },
+    "required_recommendations": [
+      "balance_celebration"
+    ],
+    "forbidden_recommendations": [
+      "screen_curfew",
+      "daily_limit_reminder"
+    ],
+    "expected_addiction_range": [
+      0.063,
+      0.223
+    ],
+    "expected_wellbeing_range": [
+      0.667,
+      0.827
+    ],
+    "expected_missions": []
+  },
+  {
+    "id": "rising_concern_9yo",
+    "age_years": 9,
+    "seed": 113,
+    "description_fr": "Hausse progressive sans pic aigu",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 90,
+      "daily_minutes_growth_per_day": 5.0,
+      "sessions_per_day": 4,
+      "short_session_fraction": 0.15,
+      "unlocks_per_day": 25,
+      "nocturnal_minutes_per_day": 8,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 15,
+      "risky_count": 10,
+      "dangerous_count": 2,
+      "total": 35
+    },
+    "mission_summary": {
+      "completed": 5,
+      "assigned": 10
+    },
+    "required_recommendations": [
+      "weekly_escalation_alert"
+    ],
+    "forbidden_recommendations": [
+      "balance_celebration"
+    ],
+    "expected_addiction_range": [
+      0.26,
+      0.42
+    ],
+    "expected_wellbeing_range": [
+      0.516,
+      0.676
+    ],
+    "expected_missions": [
+      "escalation"
+    ]
+  },
+  {
+    "id": "pure_educational_7yo",
+    "age_years": 7,
+    "seed": 114,
+    "description_fr": "Tablette à vocation exclusivement éducative",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 45,
+      "daily_minutes_growth_per_day": 0.0,
+      "sessions_per_day": 2,
+      "short_session_fraction": 0.0,
+      "unlocks_per_day": 3,
+      "nocturnal_minutes_per_day": 0,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 48,
+      "risky_count": 1,
+      "dangerous_count": 0,
+      "total": 50
+    },
+    "mission_summary": {
+      "completed": 9,
+      "assigned": 10
+    },
+    "required_recommendations": [
+      "balance_celebration"
+    ],
+    "forbidden_recommendations": [
+      "screen_curfew",
+      "educational_boost",
+      "daily_limit_reminder"
+    ],
+    "expected_addiction_range": [
+      0.0,
+      0.136
+    ],
+    "expected_wellbeing_range": [
+      0.845,
+      1.0
+    ],
+    "expected_missions": []
+  },
+  {
+    "id": "edge_case_zero_usage",
+    "age_years": 10,
+    "seed": 115,
+    "description_fr": "Aucune donnée d'usage (cas limite)",
+    "generator": {
+      "window_days": 14,
+      "base_daily_minutes": 0,
+      "daily_minutes_growth_per_day": 0.0,
+      "sessions_per_day": 0,
+      "short_session_fraction": 0.0,
+      "unlocks_per_day": 0,
+      "nocturnal_minutes_per_day": 0,
+      "active_hours": [
+        10,
+        19
+      ],
+      "weekend_multiplier": 1.0
+    },
+    "content_analyses_summary": {
+      "educational_count": 0,
+      "risky_count": 0,
+      "dangerous_count": 0,
+      "total": 0
+    },
+    "mission_summary": {
+      "completed": 0,
+      "assigned": 0
+    },
+    "required_recommendations": [],
+    "forbidden_recommendations": [
+      "screen_curfew",
+      "weekly_escalation_alert",
+      "daily_limit_reminder",
+      "session_break",
+      "balance_celebration"
+    ],
+    "expected_addiction_range": [
+      0.07,
+      0.23
+    ],
+    "expected_wellbeing_range": [
+      0.32,
+      0.48
+    ],
+    "expected_missions": []
+  }
+]

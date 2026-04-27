@@ -8,20 +8,23 @@ datasource db {
 }
 
 model User {
-  id                Int        @id @default(autoincrement())
+  id                Int               @id @default(autoincrement())
   age               Int
-  points            Int        @default(0)
-  completedMissions Int        @default(0)
-  interests         Json?      @default("[]")
-  engagementScore   Float      @default(0.5)
+  points            Int               @default(0)
+  completedMissions Int               @default(0)
+  interests         Json?             @default("[]")
+  engagementScore   Float             @default(0.5)
   lastSafeMissionAt DateTime?
-  safePointsToday   Int        @default(0)
+  safePointsToday   Int               @default(0)
   lastSafeResetDate DateTime?
-  createdAt         DateTime   @default(now())
+  createdAt         DateTime          @default(now())
   analyses          Analysis[]
   missions          Mission[]
   missionResults    MissionResult[]
   userBadges        UserBadge[]
+  usageEvents       UsageEvent[]
+  behavioralScores  BehavioralScore[]
+  recommendations   Recommendation[]
 }
 
 model Analysis {
@@ -39,17 +42,21 @@ model Analysis {
 }
 
 model Mission {
-  id             Int             @id @default(autoincrement())
-  userId         Int
-  mission        String
-  points         Int
-  status         String          @default("pending")
-  type           String          @default("real_world")
-  content        Json?
-  difficulty     Int             @default(1)
-  createdAt      DateTime        @default(now())
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  missionResults MissionResult[]
+  id                 Int             @id @default(autoincrement())
+  userId             Int
+  mission            String
+  points             Int
+   scoreSnapshotId    Int?
+  triggeringSubscore String?
+  triggeringValue    Float?
+  targetAudience     String?
+  status             String          @default("pending")
+  type               String          @default("real_world")
+  content            Json?
+  difficulty         Int             @default(1)
+  createdAt          DateTime        @default(now())
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  missionResults     MissionResult[]
 }
 
 model MissionResult {
@@ -67,12 +74,12 @@ model MissionResult {
 }
 
 model Badge {
-  id               Int        @id @default(autoincrement())
-  name             String     @unique
+  id               Int         @id @default(autoincrement())
+  name             String      @unique
   description      String
   type             String
   requirementValue String
-  createdAt        DateTime   @default(now())
+  createdAt        DateTime    @default(now())
   userBadges       UserBadge[]
 }
 
@@ -85,4 +92,51 @@ model UserBadge {
   badge     Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
 
   @@unique([userId, badgeId])
+}
+
+model UsageEvent {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  eventType   String
+  appPackage  String?
+  startedAt   DateTime
+  endedAt     DateTime?
+  durationSec Int?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt])
+  @@index([createdAt])
+}
+
+model BehavioralScore {
+  id                  Int      @id @default(autoincrement())
+  userId              Int
+  computedAt          DateTime @default(now())
+  windowDays          Int      @default(7)
+  addictionScore      Float
+  wellbeingScore      Float
+  subscoresJson       Json
+  recommendationsJson Json?
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, computedAt])
+}
+
+model Recommendation {
+  id                 Int      @id @default(autoincrement())
+  userId             Int
+  scoreSnapshotId    Int?
+  type               String
+  severity           String
+  messageFr          String
+  actionPayload      Json?
+  targetAudience     String?
+  triggeringSubscore String?
+  triggeringValue    Float?
+  status             String   @default("active")
+  createdAt          DateTime @default(now())
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
 }
