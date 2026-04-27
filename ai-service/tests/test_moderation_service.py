@@ -115,6 +115,30 @@ def test_moderate_high_educational_does_not_inflate_risk(monkeypatch: pytest.Mon
     assert r.category == "safe"
 
 
+def test_moderate_discards_low_confidence_sexual_content(monkeypatch: pytest.MonkeyPatch) -> None:
+    """NLI sexual-content false positives often score <0.5 on benign short text; must not drive risk."""
+
+    def fake_classify(_cleaned: str) -> tuple[tuple[str, float], ...]:
+        return tuple(
+            sorted(
+                {
+                    "sexual content": 0.45,
+                    "violence": 0.05,
+                    "educational": 0.1,
+                }.items()
+            )
+        )
+
+    monkeypatch.setattr(ms, "is_classifier_ready", lambda: True)
+    monkeypatch.setattr(ms, "_classify_zero_shot_cached", fake_classify)
+
+    r = ms.moderate("long enough string so we do not hit short-text fallback path")
+    assert r.used_fallback is False
+    assert "sexual content" not in r.matched_keywords
+    assert r.risk_score == 0.05
+    assert r.label_scores.get("sexual content") == 0.45
+
+
 def test_moderate_inference_exception_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(_cleaned: str) -> tuple[tuple[str, float], ...]:
         raise RuntimeError("pipeline exploded")

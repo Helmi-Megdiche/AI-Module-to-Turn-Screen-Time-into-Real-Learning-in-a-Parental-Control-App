@@ -1,0 +1,920 @@
+[
+  {
+    "id": "v1-001",
+    "text": "Today we learned about the water cycle and how rain is formed.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "english",
+    "notes": "v1 preserved — clear educational, no risk"
+  },
+  {
+    "id": "v1-002",
+    "text": "The cat sat on the mat and played with a ball of yarn.",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "english",
+    "notes": "v1 preserved — neutral safe content"
+  },
+  {
+    "id": "v1-003",
+    "text": "Mathematics is the study of numbers, shapes, and patterns.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "english",
+    "notes": "v1 preserved — educational definition"
+  },
+  {
+    "id": "v1-004",
+    "text": "I will hurt you if you don't give me what I want.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "english",
+    "notes": "v1 preserved — explicit threat"
+  },
+  {
+    "id": "v1-005",
+    "text": "This group of people are inferior and should be removed.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "english",
+    "notes": "v1 preserved — hate speech"
+  },
+  {
+    "id": "v1-006",
+    "text": "You are so stupid, nobody likes you.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "english",
+    "notes": "v1 preserved — harassment, not dangerous"
+  },
+  {
+    "id": "v1-007",
+    "text": "الأرض تدور حول الشمس وتكمل دورة كاملة في 365 يوماً.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "arabic",
+    "notes": "v1 preserved — science fact in Arabic"
+  },
+  {
+    "id": "v1-008",
+    "text": "أحب اللعب مع أصدقائي في الحديقة كل يوم.",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "arabic",
+    "notes": "v1 preserved — safe Arabic social content"
+  },
+  {
+    "id": "v1-009",
+    "text": "سأقتلك إذا فعلت ذلك مرة أخرى.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "arabic",
+    "notes": "v1 preserved — death threat in Arabic"
+  },
+  {
+    "id": "v1-010",
+    "text": "هذا الفيديو يحتوي على مشاهد عنيفة غير لائقة للأطفال.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "arabic",
+    "notes": "v1 preserved — risky Arabic content warning"
+  },
+  {
+    "id": "v1-011",
+    "text": "3ayb 3lik ta3mel hedhom lhaja",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "arabizi",
+    "notes": "v1 preserved — dialect shame expression"
+  },
+  {
+    "id": "v1-012",
+    "text": "7ram 3lik t9ol hedhom lkelma",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "arabizi",
+    "notes": "v1 preserved — religious moral reproach"
+  },
+  {
+    "id": "v1-013",
+    "text": "n9olk el7a9 ta3 el mathematics mochkla sahla",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "arabizi",
+    "notes": "v1 preserved — benign Arabizi with digits, should not trigger risk"
+  },
+  {
+    "id": "v1-014",
+    "text": "barra men hne ya kalb wella ndhbahek",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "arabizi",
+    "notes": "v1 preserved — violent threat in Arabizi"
+  },
+  {
+    "id": "v1-015",
+    "text": "ph0t0synth3s1s is how pl4nts m4ke f00d from sunl1ght",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "english_ocr_noisy",
+    "notes": "v1 preserved — OCR noise on educational text"
+  },
+  {
+    "id": "v1-016",
+    "text": "k1ll y0u s3lf n0body w4nts y0u her3",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "english_ocr_noisy",
+    "notes": "v1 preserved — self-harm threat with OCR noise"
+  },
+  {
+    "id": "v1-017",
+    "text": "fr3e v1rus t00l h4ck p4ssw0rd n0w",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "english_ocr_noisy",
+    "notes": "v1 preserved — hacking content with OCR noise"
+  },
+  {
+    "id": "v1-018",
+    "text": "g00d m0rn1ng cl4ss t0d4y w3 l34rn gr4mm4r",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "english_ocr_noisy",
+    "notes": "v1 preserved — noisy classroom educational text"
+  },
+  {
+    "id": "v1-019",
+    "text": "This movie has some violent scenes but also teaches about courage.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "english",
+    "notes": "v1 preserved — borderline: mixed risk and educational signal"
+  },
+  {
+    "id": "v1-020",
+    "text": "Learn how to pick a lock in 5 easy steps.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "english",
+    "notes": "v1 preserved — borderline: instructional but potentially harmful"
+  },
+  {
+    "id": "v1-021",
+    "text": "el jinsiya wel 7ob mochkla kebira fi el mujtama3",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "arabizi",
+    "notes": "v1 preserved — sensitive social topic in Arabizi"
+  },
+  {
+    "id": "v1-022",
+    "text": "History teaches us about past mistakes so we do not repeat them.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "english",
+    "notes": "v1 preserved — clear educational content"
+  },
+  {
+    "id": "v1-023",
+    "text": "تعلم كيف تصنع قنبلة في المنزل بخطوات بسيطة",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "arabic",
+    "notes": "v1 preserved — bomb-making instruction in Arabic"
+  },
+  {
+    "id": "v1-024",
+    "text": "The human body has 206 bones and they protect our organs.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "english",
+    "notes": "v1 preserved — anatomy educational"
+  },
+  {
+    "id": "v3-fr-safe-001",
+    "text": "Bonjour tout le monde, comment allez-vous aujourd'hui ?",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — neutral French greeting"
+  },
+  {
+    "id": "v3-fr-safe-002",
+    "text": "J'aime jouer avec mes amis dans le parc après l'école.",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — safe French social content, child-typical"
+  },
+  {
+    "id": "v3-fr-safe-003",
+    "text": "Mon chat s'appelle Mimi et il aime dormir sur le canapé.",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — neutral French, animal topic"
+  },
+  {
+    "id": "v3-fr-safe-004",
+    "text": "Ce week-end, nous allons faire un pique-nique en famille.",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — safe family activity in French"
+  },
+  {
+    "id": "v3-fr-edu-001",
+    "text": "La photosynthèse est le processus par lequel les plantes produisent leur nourriture grâce à la lumière du soleil.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — French science educational, photosynthesis"
+  },
+  {
+    "id": "v3-fr-edu-002",
+    "text": "La Révolution française a eu lieu en 1789 et a transformé la société européenne.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — French history educational"
+  },
+  {
+    "id": "v3-fr-edu-003",
+    "text": "Les fractions représentent une partie d'un tout. Par exemple, 1/2 signifie une moitié.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — French math educational"
+  },
+  {
+    "id": "v3-fr-edu-004",
+    "text": "L'ADN est la molécule qui contient les informations génétiques de tous les êtres vivants.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — French biology educational"
+  },
+  {
+    "id": "v3-fr-edu-005",
+    "text": "La géographie étudie les territoires, les populations et les relations entre les humains et leur environnement.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — French geography educational"
+  },
+  {
+    "id": "v3-fr-edu-006",
+    "text": "Pour apprendre une nouvelle langue, il faut pratiquer chaque jour et ne pas avoir peur des erreurs.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — French learning advice, educational signal"
+  },
+  {
+    "id": "v3-fr-edu-007",
+    "text": "Le système solaire est composé du Soleil et de huit planètes qui tournent autour de lui.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — French astronomy educational"
+  },
+  {
+    "id": "v3-fr-edu-008",
+    "text": "En chimie, H2O est la formule de l'eau : deux atomes d'hydrogène et un atome d'oxygène.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — French chemistry educational"
+  },
+  {
+    "id": "v3-fr-edu-009",
+    "text": "Les droits de l'enfant incluent le droit à l'éducation, à la santé et à la protection contre la violence.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — French civic educational, rights topic"
+  },
+  {
+    "id": "v3-fr-edu-010",
+    "text": "Un algorithme est une suite d'instructions précises permettant de résoudre un problème.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "new — French computer science educational"
+  },
+  {
+    "id": "v3-fr-risky-001",
+    "text": "Tu es vraiment nul, tout le monde se moque de toi à l'école.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "french",
+    "notes": "new — French cyberbullying / harassment"
+  },
+  {
+    "id": "v3-fr-risky-002",
+    "text": "Ce film contient des scènes de violence et de sang non recommandées aux jeunes.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "french",
+    "notes": "new — French content warning for violence"
+  },
+  {
+    "id": "v3-fr-risky-003",
+    "text": "Je déteste cette personne, elle mérite d'être punie.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "french",
+    "notes": "new — French hostile sentiment, borderline"
+  },
+  {
+    "id": "v3-fr-risky-004",
+    "text": "Comment pirater un compte Instagram facilement sans se faire attraper.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "french",
+    "notes": "new — French hacking tutorial framing, risky instructional"
+  },
+  {
+    "id": "v3-fr-risky-005",
+    "text": "Ces gens-là sont tous pareils, on ne peut pas leur faire confiance.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "french",
+    "notes": "new — French stereotyping / implicit discrimination"
+  },
+  {
+    "id": "v3-fr-risky-006",
+    "text": "Ce jeu est interdit aux moins de 18 ans à cause du contenu violent et adulte.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "french",
+    "notes": "new — French age-restriction context, risky content reference"
+  },
+  {
+    "id": "v3-fr-risky-007",
+    "text": "Tout le monde te déteste, tu ferais mieux de disparaître.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "french",
+    "notes": "new — French social exclusion threat, borderline dangerous"
+  },
+  {
+    "id": "v3-fr-risky-008",
+    "text": "Ce site propose des substances pour maigrir très vite sans prescription médicale.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "french",
+    "notes": "new — French unregulated substance promotion"
+  },
+  {
+    "id": "v3-fr-danger-001",
+    "text": "Je vais te tuer si tu n'obéis pas immédiatement.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "french",
+    "notes": "new — French explicit death threat"
+  },
+  {
+    "id": "v3-fr-danger-002",
+    "text": "Voici comment fabriquer une arme à feu artisanale étape par étape.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "french",
+    "notes": "new — French weapon manufacturing instructions"
+  },
+  {
+    "id": "v3-fr-danger-003",
+    "text": "Ces individus ne méritent pas de vivre parmi nous, il faut les éliminer.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "french",
+    "notes": "new — French extreme hate speech with elimination call"
+  },
+  {
+    "id": "v3-fr-danger-004",
+    "text": "Je pense à en finir avec ma vie, je ne vois plus d'issue.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "french",
+    "notes": "new — French self-harm / suicidal ideation"
+  },
+  {
+    "id": "v3-fr-danger-005",
+    "text": "Télécharge ce logiciel maintenant pour espionner et voler les données de n'importe quel appareil.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "french",
+    "notes": "new — French malware / spyware promotion"
+  },
+  {
+    "id": "v3-fr-danger-006",
+    "text": "Rejoins notre groupe secret pour lutter contre les ennemis de notre nation par tous les moyens.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "french",
+    "notes": "new — French extremist recruitment framing"
+  },
+  {
+    "id": "v3-mix-frar-001",
+    "text": "Aujourd'hui en classe nous avons étudié النظام الشمسي et c'était très intéressant.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_fr_ar",
+    "notes": "new — FR/AR code-switch, educational solar system topic"
+  },
+  {
+    "id": "v3-mix-frar-002",
+    "text": "Mon ami m'a dit أنت غبي devant tout le monde, j'étais très triste.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "mixed_fr_ar",
+    "notes": "new — FR/AR mixed harassment: Arabic insult embedded in French narrative"
+  },
+  {
+    "id": "v3-mix-frar-003",
+    "text": "J'aime regarder des vidéos sur YouTube عن الطبيعة والحيوانات.",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_fr_ar",
+    "notes": "new — FR/AR safe mixed content, nature videos"
+  },
+  {
+    "id": "v3-mix-frar-004",
+    "text": "سأقتلك ya idiot, tu ne mérites pas d'exister.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "mixed_fr_ar",
+    "notes": "new — FR/AR dangerous: death threat split across both languages"
+  },
+  {
+    "id": "v3-mix-frar-005",
+    "text": "Les mathématiques sont بسيطة si on s'entraîne chaque jour.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_fr_ar",
+    "notes": "new — FR/AR educational encouragement, math study"
+  },
+  {
+    "id": "v3-mix-frar-006",
+    "text": "Ce site montre du contenu مقزز pour les enfants, évite-le.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "mixed_fr_ar",
+    "notes": "new — FR/AR warning about disgusting content, risky flagging"
+  },
+  {
+    "id": "v3-mix-frar-007",
+    "text": "الفيزياء صعبة mais avec des exercices pratiques elle devient facile à comprendre.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_fr_ar",
+    "notes": "new — AR/FR physics study tip, educational"
+  },
+  {
+    "id": "v3-mix-frar-008",
+    "text": "Envoie-moi ton mot de passe كلمة السر maintenant sinon je publie tes photos.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "mixed_fr_ar",
+    "notes": "new — FR/AR sextortion / blackmail threat across both languages"
+  },
+  {
+    "id": "v3-mix-frar-009",
+    "text": "Je suis فرحان parce que j'ai réussi mon examen de sciences aujourd'hui.",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_fr_ar",
+    "notes": "new — FR/AR happy exam result, safe and positive"
+  },
+  {
+    "id": "v3-mix-frar-010",
+    "text": "هذا الموقع يبيع مخدرات pas cher avec livraison rapide.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "mixed_fr_ar",
+    "notes": "new — AR/FR drug sales promotion across both languages"
+  },
+  {
+    "id": "v3-mix-fren-001",
+    "text": "I love learning French, c'est une langue magnifique et très utile.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_fr_en",
+    "notes": "new — FR/EN mixed, language learning motivation"
+  },
+  {
+    "id": "v3-mix-fren-002",
+    "text": "This video is so violent, c'est vraiment choquant pour les enfants.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "mixed_fr_en",
+    "notes": "new — FR/EN mixed risky content reaction"
+  },
+  {
+    "id": "v3-mix-fren-003",
+    "text": "You are stupid et tu ne mériteras jamais rien dans ta vie.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "mixed_fr_en",
+    "notes": "new — FR/EN mixed harassment insult"
+  },
+  {
+    "id": "v3-mix-fren-004",
+    "text": "Let's study together, on peut se retrouver à la bibliothèque après les cours.",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_fr_en",
+    "notes": "new — FR/EN safe study invitation"
+  },
+  {
+    "id": "v3-mix-fren-005",
+    "text": "I will kill you if you don't stop, je te préviens c'est ma dernière fois.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "mixed_fr_en",
+    "notes": "new — FR/EN death threat, danger split across languages"
+  },
+  {
+    "id": "v3-mix-fren-006",
+    "text": "The water cycle, ou le cycle de l'eau, is essential for all life on Earth.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_fr_en",
+    "notes": "new — FR/EN educational science, water cycle bilingual"
+  },
+  {
+    "id": "v3-mix-fren-007",
+    "text": "Download this hack tool maintenant et vole les comptes en quelques secondes.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "mixed_fr_en",
+    "notes": "new — FR/EN hacking tool promotion, dangerous"
+  },
+  {
+    "id": "v3-mix-fren-008",
+    "text": "My favorite subject is histoire de France, especially the Napoleon era.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_fr_en",
+    "notes": "new — FR/EN educational history interest"
+  },
+  {
+    "id": "v3-mix-frarabizi-001",
+    "text": "C'est 3ayb de parler comme ça à ta mère.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "mixed_fr_arabizi",
+    "notes": "new — FR + Arabizi moral reproach, dialect keyword embedded"
+  },
+  {
+    "id": "v3-mix-frarabizi-002",
+    "text": "J'ai appris en classe aujourd'hui, kenet el dars ta3 el 7isab sahel barcha.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_fr_arabizi",
+    "notes": "new — FR + Arabizi educational, math lesson report"
+  },
+  {
+    "id": "v3-mix-frarabizi-003",
+    "text": "7ram 3lik, cette attitude est complètement inacceptable.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "mixed_fr_arabizi",
+    "notes": "new — FR + Arabizi religious reproach mixed with French"
+  },
+  {
+    "id": "v3-mix-frarabizi-004",
+    "text": "On va ndhbahek si tu répètes ça encore une fois.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "mixed_fr_arabizi",
+    "notes": "new — FR + Arabizi violent threat"
+  },
+  {
+    "id": "v3-mix-frarabizi-005",
+    "text": "Le cours était bien, w kenna nta3almou des choses nouvelles aujourd'hui.",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_fr_arabizi",
+    "notes": "new — FR + Arabizi safe positive school feedback"
+  },
+  {
+    "id": "v3-mix-frarabizi-006",
+    "text": "Cette vidéo montre des choses 7ashuma vraiment pas pour les enfants.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "mixed_fr_arabizi",
+    "notes": "new — FR + Arabizi risky content warning with dialect keyword 7ashuma"
+  },
+  {
+    "id": "v3-mix-frarabizi-007",
+    "text": "Mchina l'école w tkallmna ma3 l'professeur 3la el projet.",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_fr_arabizi",
+    "notes": "new — FR + Arabizi safe school social narrative"
+  },
+  {
+    "id": "v3-mix-frarabizi-008",
+    "text": "Kalb wlek, je te jure tu vas regretter ce que tu as fait.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "mixed_fr_arabizi",
+    "notes": "new — FR + Arabizi threat with dialect insult kalb"
+  },
+  {
+    "id": "v3-edge-001",
+    "text": "The history of war helps us understand why peace is so important.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "english",
+    "notes": "edge — war keyword in educational context, must not trigger risky"
+  },
+  {
+    "id": "v3-edge-002",
+    "text": "In biology class we studied how diseases spread and how vaccines stop them.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "english",
+    "notes": "edge — disease/spread keywords in safe educational context"
+  },
+  {
+    "id": "v3-edge-003",
+    "text": "كلب هو حيوان أليف يحبه الكثير من الناس في العالم.",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "arabic",
+    "notes": "edge — Arabic word kalb (dog) used literally, not as insult"
+  },
+  {
+    "id": "v3-edge-004",
+    "text": "The chemistry experiment involved mixing two harmless substances to observe a reaction.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "english",
+    "notes": "edge — mixing/reaction keywords in clearly educational lab context"
+  },
+  {
+    "id": "v3-edge-005",
+    "text": "n9olk el7a9 barcha haja mochkla fi el école mte3na",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "arabizi",
+    "notes": "edge — Arabizi with digit 9, benign school complaint, no real risk"
+  },
+  {
+    "id": "v3-edge-006",
+    "text": "Ce documentaire parle de la violence dans le monde et de ses causes profondes.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "french",
+    "notes": "edge — French documentary about violence: borderline risky not dangerous"
+  },
+  {
+    "id": "v3-edge-007",
+    "text": "I hate Mondays because school is so boring, I just want to stay home.",
+    "expected_category": "safe",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "english",
+    "notes": "edge — hate keyword used colloquially, must not classify as risky"
+  },
+  {
+    "id": "v3-edge-008",
+    "text": "Les terroristes ont été condamnés par le tribunal international hier matin.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "french",
+    "notes": "edge — news report framing: terrorism keyword but not promoting it"
+  },
+  {
+    "id": "v3-edge-009",
+    "text": "عملية حسابية بسيطة: 5 + 3 = 8 وهذا ما تعلمناه في الصف اليوم.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "arabic",
+    "notes": "edge — Arabic math with digits, must not false-positive on digit hints"
+  },
+  {
+    "id": "v3-edge-010",
+    "text": "Il faut apprendre à gérer la colère et les émotions négatives de façon saine.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french",
+    "notes": "edge — anger/negative keywords in SEL educational context, must not flag risky"
+  },
+  {
+    "id": "v3-fr-ocr-001",
+    "text": "l4 ph0t0synth3se est un pr0cessus b10l0g1que tr3s 1mp0rtant",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french_ocr_noisy",
+    "notes": "new — French educational text with OCR digit noise"
+  },
+  {
+    "id": "v3-fr-ocr-002",
+    "text": "j3 v4is t3 tu3r s1 tu n3 p4rt p4s 1mm3d14t3m3nt",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "french_ocr_noisy",
+    "notes": "new — French death threat with OCR noise substitutions"
+  },
+  {
+    "id": "v3-fr-ocr-003",
+    "text": "t3l3ch4rg3 c3 l0g1c13l gr4tu1t p0ur h4ck3r n'1mp0rt3 qu3l c0mpt3",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "french_ocr_noisy",
+    "notes": "new — French hacking tool promo with heavy OCR noise"
+  },
+  {
+    "id": "v3-fr-ocr-004",
+    "text": "b0nj0ur cl4ss3 auj0urd'hu1 n0us 3tud10ns l3s fr4ct10ns",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french_ocr_noisy",
+    "notes": "new — French classroom OCR noisy educational"
+  },
+  {
+    "id": "v3-fr-ocr-005",
+    "text": "tu 3s vr41m3nt nul p3rs0nn3 n3 t'41m3 1c1",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "french_ocr_noisy",
+    "notes": "new — French harassment insult with OCR noise"
+  },
+  {
+    "id": "v3-fr-ocr-006",
+    "text": "l3 syst3m3 s0l41r3 c0mpr3nd hu1t pl4n3t3s qu1 t0urn3nt 4ut0ur du s0l31l",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "french_ocr_noisy",
+    "notes": "new — French astronomy with OCR noise, must still classify educational"
+  },
+  {
+    "id": "v3-mix-enar-001",
+    "text": "Today we learned that الماء يغلي عند 100 درجة مئوية at sea level.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_en_ar",
+    "notes": "new — EN/AR science fact, bilingual educational"
+  },
+  {
+    "id": "v3-mix-enar-002",
+    "text": "I feel so angry at you, أنت لا تستحق الاحترام على الإطلاق.",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "mixed_en_ar",
+    "notes": "new — EN/AR mixed hostility, disrespect across languages"
+  },
+  {
+    "id": "v3-mix-enar-003",
+    "text": "My homework is about النظم البيئية and how humans affect them.",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "mixed_en_ar",
+    "notes": "new — EN/AR homework topic, ecology educational"
+  },
+  {
+    "id": "v3-mix-enar-004",
+    "text": "سوف أقتلك you have no idea what I am capable of doing to you.",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "mixed_en_ar",
+    "notes": "new — AR/EN death threat reinforced across both languages"
+  },
+  {
+    "id": "v3-arabizi-edge-001",
+    "text": "mochkla kbira fi el denya hedhom el nas el 5aybin",
+    "expected_category": "risky",
+    "expected_risk_min": 0.3,
+    "expected_risk_max": 0.89,
+    "language": "arabizi",
+    "notes": "new — Arabizi negative social generalization, dialect risky"
+  },
+  {
+    "id": "v3-arabizi-edge-002",
+    "text": "el 3ilm nour wel jahl dhelma, lazem ta3raf ta9ra mizien",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "arabizi",
+    "notes": "new — Arabizi proverb about education: knowledge is light, ignorance is darkness"
+  },
+  {
+    "id": "v3-arabizi-edge-003",
+    "text": "9ahba wled el 7aram ndhbahek w nkhalli ma7adk yel9ak",
+    "expected_category": "dangerous",
+    "expected_risk_min": 0.9,
+    "expected_risk_max": 1.0,
+    "language": "arabizi",
+    "notes": "new — Arabizi heavy insults + violent death threat"
+  },
+  {
+    "id": "v3-arabizi-edge-004",
+    "text": "kenet nta3alem el khattiya ta3 el 3arabiya w hiya sahla barcha",
+    "expected_category": "educational",
+    "expected_risk_min": 0.0,
+    "expected_risk_max": 0.29,
+    "language": "arabizi",
+    "notes": "new — Arabizi about learning Arabic calligraphy, clearly educational"
+  }
+]

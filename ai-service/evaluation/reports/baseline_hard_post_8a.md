@@ -1,6 +1,6 @@
-# AI Benchmark Report (baseline hard v2)
+# AI Benchmark Report (baseline hard post 8a)
 
-- Run timestamp: **2026-04-20 17:39:25 UTC**
+- Run timestamp: **2026-04-27 16:01:10 UTC**
 - Dataset: `C:/Users/helmi/OneDrive/Bureau/PFE/AI-Module-to-Turn-Screen-Time-into-Real-Learning-in-a-Parental-Control-App/ai-service/evaluation/datasets/hard_cases_v1.json`
 - Total samples: **28**
 - Mode: `build_analyze_response_from_plain_text(text, image=None)`

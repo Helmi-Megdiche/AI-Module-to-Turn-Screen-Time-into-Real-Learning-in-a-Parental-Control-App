@@ -2,9 +2,9 @@
 
 ## Run metadata
 
-- Timestamp UTC: **2026-04-27 16:19:19 UTC**
+- Timestamp UTC: **2026-04-27 16:19:46 UTC**
 - Scorer version: **Phase 6b**
-- Profiles file: `C:/Users/helmi/AppData/Local/Temp/pytest-of-helmi/pytest-26/test_runner_main_returns_zero_0/failing_profiles.json`
+- Profiles file: `C:/Users/helmi/AppData/Local/Temp/pytest-of-helmi/pytest-27/test_runner_main_returns_zero_0/failing_profiles.json`
 - Total profile count: **1**
 - Score range pass rate: **N/A (run without --assert-ranges)**
 - Required-recommendation pass rate: **0/1**
@@ -95,7 +95,7 @@ Expected ranges (header): addiction=None | wellbeing=None
 
 - Determinism: generator uses only local `random.Random(seed)`.
 - No numpy or external stochastic library used.
-- Reproduce command: `\.venv\Scripts\python.exe -m evaluation.behavioral.scripts.run_behavioral_benchmark --profiles C:/Users/helmi/AppData/Local/Temp/pytest-of-helmi/pytest-26/test_runner_main_returns_zero_0/failing_profiles.json --report-name phase6a_test.md`
+- Reproduce command: `\.venv\Scripts\python.exe -m evaluation.behavioral.scripts.run_behavioral_benchmark --profiles C:/Users/helmi/AppData/Local/Temp/pytest-of-helmi/pytest-27/test_runner_main_returns_zero_0/failing_profiles.json --report-name phase6a_test.md`
 - Seed list per profile:
 | id | seed |
 |---|---:|

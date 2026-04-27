@@ -30,6 +30,7 @@ from app.config import (
     DANGEROUS_THRESHOLD,
     MATCHED_KEYWORDS_THRESHOLD,
     RISKY_THRESHOLD,
+    SEXUAL_CONTENT_MIN_CONFIDENCE,
     SHORT_TEXT_FALLBACK_THRESHOLD,
     STARTUP_MODEL_LOAD_TIMEOUT_SECONDS,
     ZERO_SHOT_HYPOTHESIS_TEMPLATE,
@@ -364,7 +365,13 @@ def _extract_scores(label_scores: dict[str, float]) -> tuple[float, list[str]]:
     Returns:
         tuple[float, list[str]]: Rounded risk score and sorted matched labels.
     """
-    risk_only = {k: v for k, v in label_scores.items() if k in _RISK_LABEL_KEYS}
+    risk_only: dict[str, float] = {}
+    for k, v in label_scores.items():
+        if k not in _RISK_LABEL_KEYS:
+            continue
+        if k == "sexual content" and float(v) < SEXUAL_CONTENT_MIN_CONFIDENCE:
+            continue
+        risk_only[k] = float(v)
     risk_score = max(risk_only.values(), default=0.0)
     matched = [
         label

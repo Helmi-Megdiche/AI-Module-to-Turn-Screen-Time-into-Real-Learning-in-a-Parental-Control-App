@@ -89,9 +89,29 @@ def confusion_matrix(
     for act, exp in zip(actual_labels, expected_labels):
         if exp not in matrix:
             matrix[exp] = {k: 0 for k in labels}
-        if act not in matrix[exp]:
-            for row in matrix.values():
-                row.setdefault(act, 0)
-        matrix[exp][act] += 1
+        matrix[exp].setdefault(act, 0)
+        matrix[exp][act] = matrix[exp].get(act, 0) + 1
     return matrix
 
+
+def per_expected_category_recall(
+    matrix: dict[str, dict[str, int]],
+    label_list: Iterable[str],
+) -> dict[str, dict[str, float | int]]:
+    """
+    Per expected category: row total, diagonal (correct), recall = TP / row_total.
+
+    Aligns with confusion_matrix layout (rows = expected, columns = predicted).
+    """
+    labels = list(label_list)
+    out: dict[str, dict[str, float | int]] = {}
+    for exp in labels:
+        row = matrix.get(exp, {})
+        total = sum(row.values())
+        tp = int(row.get(exp, 0))
+        out[exp] = {
+            "total": total,
+            "correct": tp,
+            "recall": safe_div(float(tp), float(total)),
+        }
+    return out

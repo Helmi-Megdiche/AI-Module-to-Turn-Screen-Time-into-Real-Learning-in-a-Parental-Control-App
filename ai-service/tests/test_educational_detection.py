@@ -82,7 +82,11 @@ def test_orchestrator_educational_low_risk_sets_category_educational(monkeypatch
 
     monkeypatch.setattr(orch, "moderate", fake_moderate)
 
-    out = build_analyze_response_from_plain_text(LONG_TEXT, image=None)
+    # Semantic hint required or orchestrator will not append educational keyword / RULE A.
+    out = build_analyze_response_from_plain_text(
+        "this text is long enough for the model path and we learn here",
+        image=None,
+    )
     assert out.category == "educational"
     assert "educational content" in out.matched_keywords
     assert out.risk_score == 0.15
