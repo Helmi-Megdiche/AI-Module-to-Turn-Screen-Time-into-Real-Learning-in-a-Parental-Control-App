@@ -72,3 +72,8 @@ yarn-error.log
 !.yarn/sdks
 !.yarn/versions
 window_dump.xml
+# Phase 2.2 runtime artifacts (local evidence, never commit)
+g6_*.txt
+g8_*.txt
+phase*_run_logs.txt
+window_dump.xml
