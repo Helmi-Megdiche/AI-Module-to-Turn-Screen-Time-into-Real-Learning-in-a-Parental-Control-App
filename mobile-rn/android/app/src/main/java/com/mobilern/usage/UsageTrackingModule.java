@@ -1,17 +1,20 @@
 package com.mobilern.usage;
 
 import android.app.AppOpsManager;
-import android.app.usage.UsageStats;
-import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Process;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkInfo;
+import androidx.work.WorkManager;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
@@ -21,12 +24,20 @@ import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class UsageTrackingModule extends ReactContextBaseJavaModule {
+
     private static final String MODULE_NAME = "UsageTracking";
-    private static final String PREFS_NAME = "usage_tracking_prefs";
-    private static final String KEY_LAST_SYNC_EPOCH_MS = "lastSyncEpochMs";
+    /** Logs when RN invokes background-scheduling APIs (distinct from RN_USAGE_BG worker tag). */
+    private static final String LOG_TAG_BG_BRIDGE = "RN_USAGE_BG_JS";
 
     public UsageTrackingModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -58,59 +69,18 @@ public class UsageTrackingModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void getUsageEvents(Promise promise) {
         try {
+            Context ctx = getReactApplicationContext();
             long now = System.currentTimeMillis();
-            long savedCursor = getSharedPreferences().getLong(KEY_LAST_SYNC_EPOCH_MS, -1L);
-            long lastSync = savedCursor > 0 ? savedCursor : now - 24L * 60L * 60L * 1000L;
+            long savedCursor = SyncPrefs.getLastSyncEpochMs(ctx);
 
-            UsageStatsManager usageStatsManager =
-                    (UsageStatsManager) getReactApplicationContext().getSystemService(Context.USAGE_STATS_SERVICE);
-            List<UsageStats> stats = usageStatsManager == null
-                    ? null
-                    : usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, lastSync, now);
+            UsageStatsCollector.CollectResult collected =
+                    UsageStatsCollector.collect(ctx, savedCursor, now, Integer.MAX_VALUE);
 
-            WritableArray events = Arguments.createArray();
-            String selfPackage = getReactApplicationContext().getPackageName();
-            if (stats != null) {
-                for (UsageStats usage : stats) {
-                    String packageName = usage.getPackageName();
-                    if (TextUtils.isEmpty(packageName)) {
-                        continue;
-                    }
-                    if (packageName.equals(selfPackage)) {
-                        continue;
-                    }
-                    if (packageName.startsWith("android.")
-                            || packageName.startsWith("com.android.")
-                            || packageName.startsWith("com.google.android.")) {
-                        continue;
-                    }
-
-                    long totalForegroundMs = usage.getTotalTimeInForeground();
-                    if (totalForegroundMs <= 0) {
-                        continue;
-                    }
-
-                    long startedAt = usage.getLastTimeUsed();
-                    int durationSec = (int) Math.floor(totalForegroundMs / 1000.0d);
-                    long endedAt = startedAt + (durationSec * 1000L);
-
-                    WritableMap item = Arguments.createMap();
-                    item.putString("event_type", "app_session");
-                    item.putString("app_package", packageName);
-                    /**
-                     * started_at is approximated using lastTimeUsed; it is not a true session start.
-                     * Future improvement: derive accurate sessions with UsageEvents API.
-                     */
-                    item.putDouble("started_at", (double) startedAt);
-                    item.putDouble("ended_at", (double) endedAt);
-                    item.putDouble("duration_sec", (double) durationSec);
-                    events.pushMap(item);
-                }
-            }
+            WritableArray events = jsonEventsToWritable(collected.events);
 
             WritableMap result = Arguments.createMap();
             result.putArray("events", events);
-            result.putString("nextCursor", String.valueOf(now));
+            result.putString("nextCursor", collected.nextCursor);
             promise.resolve(result);
         } catch (Exception e) {
             promise.reject("USAGE_EVENTS_READ_FAILED", e.getMessage(), e);
@@ -137,10 +107,7 @@ public class UsageTrackingModule extends ReactContextBaseJavaModule {
             return;
         }
 
-        SharedPreferences preferences = getSharedPreferences();
-        long savedCursor = preferences.getLong(KEY_LAST_SYNC_EPOCH_MS, -1L);
-        long nextSavedCursor = Math.max(savedCursor, incomingCursor);
-        preferences.edit().putLong(KEY_LAST_SYNC_EPOCH_MS, nextSavedCursor).apply();
+        SyncPrefs.advanceCursorMonotonic(getReactApplicationContext(), incomingCursor);
         promise.resolve(true);
     }
 
@@ -151,8 +118,150 @@ public class UsageTrackingModule extends ReactContextBaseJavaModule {
         getReactApplicationContext().startActivity(intent);
     }
 
-    private SharedPreferences getSharedPreferences() {
-        return getReactApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    /**
+     * Mirrors resolved API base URL from JS so WorkManager uploads hit the same host as foreground sync.
+     */
+    @ReactMethod
+    public void setApiBaseUrl(String url, Promise promise) {
+        try {
+            SyncPrefs.setApiBaseUrl(getReactApplicationContext(), url);
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.reject("SET_API_BASE_URL_FAILED", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Schedules periodic behavioral sync ({@link UsageSyncWorker#UNIQUE_WORK_NAME}).
+     */
+    @ReactMethod
+    public void enqueuePeriodicSync(int intervalMinutes, Promise promise) {
+        try {
+            Context ctx = getReactApplicationContext();
+            int safe = Math.max(15, intervalMinutes);
+
+            PeriodicWorkRequest periodicWork =
+                    new PeriodicWorkRequest.Builder(
+                            UsageSyncWorker.class,
+                            safe,
+                            TimeUnit.MINUTES)
+                            .setConstraints(UsageSyncWorker.syncConstraints())
+                            .setBackoffCriteria(
+                                    UsageSyncWorker.backoffPolicy(),
+                                    UsageSyncWorker.backoffSeconds(),
+                                    TimeUnit.SECONDS)
+                            .build();
+
+            WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(
+                    UsageSyncWorker.UNIQUE_WORK_NAME,
+                    ExistingPeriodicWorkPolicy.REPLACE,
+                    periodicWork);
+
+            SyncPrefs.setBgSchedule(ctx, true, safe);
+
+            Log.d(UsageSyncWorker.LOG_TAG, "enqueue interval=" + safe);
+
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.reject("ENQUEUE_PERIODIC_SYNC_FAILED", e.getMessage(), e);
+        }
+    }
+
+    @ReactMethod
+    public void cancelPeriodicSync(Promise promise) {
+        try {
+            Context ctx = getReactApplicationContext();
+            WorkManager.getInstance(ctx).cancelUniqueWork(UsageSyncWorker.UNIQUE_WORK_NAME);
+            SyncPrefs.setBgSchedule(ctx, false, SyncPrefs.getBgIntervalMinutes(ctx));
+
+            Log.d(UsageSyncWorker.LOG_TAG, "cancelled tag=" + UsageSyncWorker.UNIQUE_WORK_NAME);
+
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.reject("CANCEL_PERIODIC_SYNC_FAILED", e.getMessage(), e);
+        }
+    }
+
+    @ReactMethod
+    public void triggerOneShotSyncNow(Promise promise) {
+        try {
+            Context ctx = getReactApplicationContext();
+            OneTimeWorkRequest oneTime =
+                    new OneTimeWorkRequest.Builder(UsageSyncWorker.class)
+                            .setConstraints(UsageSyncWorker.syncConstraints())
+                            .setBackoffCriteria(
+                                    UsageSyncWorker.backoffPolicy(),
+                                    UsageSyncWorker.backoffSeconds(),
+                                    TimeUnit.SECONDS)
+                            .build();
+
+            WorkManager.getInstance(ctx).enqueue(oneTime);
+
+            Log.d(UsageSyncWorker.LOG_TAG, "one_shot enqueued");
+
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.reject("ONE_SHOT_SYNC_FAILED", e.getMessage(), e);
+        }
+    }
+
+    @ReactMethod
+    public void getScheduledSyncStatus(Promise promise) {
+        Context ctx = getReactApplicationContext();
+        WritableMap map = Arguments.createMap();
+        boolean prefsEnabled = SyncPrefs.isBgSyncEnabled(ctx);
+        int interval = SyncPrefs.getBgIntervalMinutes(ctx);
+
+        boolean wmScheduled = false;
+        try {
+            List<WorkInfo> infos = WorkManager.getInstance(ctx)
+                    .getWorkInfosForUniqueWork(UsageSyncWorker.UNIQUE_WORK_NAME)
+                    .get(5, TimeUnit.SECONDS);
+            if (!infos.isEmpty()) {
+                WorkInfo.State st = infos.get(0).getState();
+                wmScheduled = st == WorkInfo.State.ENQUEUED
+                        || st == WorkInfo.State.RUNNING
+                        || st == WorkInfo.State.BLOCKED;
+            }
+        } catch (ExecutionException | InterruptedException | TimeoutException e) {
+            Log.w(LOG_TAG_BG_BRIDGE, "getScheduledSyncStatus work query failed: " + e.getMessage());
+        }
+
+        map.putBoolean("enabled", prefsEnabled && wmScheduled);
+        map.putInt("intervalMinutes", interval);
+        map.putDouble("lastRunAtMs", (double) SyncPrefs.getBgLastRunAtMs(ctx));
+        map.putString("lastResult", SyncPrefs.getBgLastResult(ctx));
+        map.putString("lastError", SyncPrefs.getBgLastError(ctx));
+
+        promise.resolve(map);
+    }
+
+    /**
+     * Optional: persist default analytics user id for native POST bodies (foreground + worker).
+     */
+    @ReactMethod
+    public void setSyncUserId(int userId, Promise promise) {
+        try {
+            SyncPrefs.setSyncUserId(getReactApplicationContext(), userId);
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.reject("SET_SYNC_USER_ID_FAILED", e.getMessage(), e);
+        }
+    }
+
+    private WritableArray jsonEventsToWritable(JSONArray arr) throws JSONException {
+        WritableArray wa = Arguments.createArray();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.getJSONObject(i);
+            WritableMap m = Arguments.createMap();
+            m.putString("event_type", o.optString("event_type"));
+            m.putString("app_package", o.optString("app_package"));
+            m.putDouble("started_at", (double) o.optLong("started_at", 0L));
+            m.putDouble("ended_at", (double) o.optLong("ended_at", 0L));
+            m.putDouble("duration_sec", o.optDouble("duration_sec", 0d));
+            wa.pushMap(m);
+        }
+        return wa;
     }
 
     private boolean hasUsageStatsPermission() {

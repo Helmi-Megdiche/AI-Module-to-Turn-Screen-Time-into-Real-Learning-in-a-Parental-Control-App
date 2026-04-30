@@ -108,6 +108,9 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
+    // Phase 2.2 — behavioral-sync worker (Java API only; do not use work-runtime-ktx).
+    implementation("androidx.work:work-runtime:2.9.0")
+
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {

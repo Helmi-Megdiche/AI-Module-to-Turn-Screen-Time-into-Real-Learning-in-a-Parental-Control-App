@@ -909,7 +909,7 @@ Limitations (Phase 1 scope):
 
 - `started_at` is approximated from `UsageStats.lastTimeUsed` (not a true session start)
 - no screenshot/MediaProjection
-- no WorkManager/foreground service
+- foreground-only sync unless Phase 2.2 background worker is enabled (below)
 
 ## 16) React Native Behavioral UI (Phase 2.1)
 
@@ -940,4 +940,27 @@ Phase 2.1 extends the React Native client in `mobile-rn/` with behavioral analys
   - `RN_BEHAVIOR` logs for request start/success/failure, HTTP statuses, validation blocks, list key warnings, and subscore shape warnings
 
 Phase 2.1 keeps Phase 1 sync semantics untouched and introduces no backend, AI, screenshot, or background-worker changes.
+
+## 17) React Native background usage sync (Phase 2.2)
+
+Phase 2.2 adds **Android-only** periodic usage upload via **WorkManager** (`androidx.work:work-runtime:2.9.0`, Java API), sharing the **same cursor** as Phase 1 foreground sync (`usage_tracking_prefs` → `lastSyncEpochMs`, monotonic `Math.max(saved, incoming)`).
+
+- **Native**
+  - `mobile-rn/android/app/src/main/java/com/mobilern/usage/SyncPrefs.java` — SharedPreferences helper (prefs name + cursor keys locked to Phase 1).
+  - `mobile-rn/android/app/src/main/java/com/mobilern/usage/UsageStatsCollector.java` — shared query/filter logic used by both RN bridge and worker (no duplicated UsageStats iteration).
+  - `mobile-rn/android/app/src/main/java/com/mobilern/usage/UsageSyncWorker.java` — POST `/api/usage/events` with **OkHttp 4.x** only (`RequestBody.create(MediaType, String)`), synchronous `execute()` inside `doWork()`, explicit timeouts (connect 10s / read & write 15s), cursor advanced **only** on **2xx**.
+  - Unique periodic work name: **`behavioral-sync`** (`ExistingPeriodicWorkPolicy.REPLACE`). Constraints: network **CONNECTED**, battery **not low**. Default periodic interval from UI defaults to **30** minutes (minimum **15**). Backoff: exponential from **30s**.
+  - **Logging:** worker → `RN_USAGE_BG`; RN scheduling bridge diagnostics → `RN_USAGE_BG_JS`; foreground manual sync stays on **`RN_USAGE_TEST`** (Phase 1).
+- **Bridge extensions** (`UsageTrackingModule`): `setApiBaseUrl`, `enqueuePeriodicSync`, `cancelPeriodicSync`, `triggerOneShotSyncNow`, `getScheduledSyncStatus`, optional `setSyncUserId`.
+- **JS**
+  - `mobile-rn/src/services/backgroundSyncService.ts` — enable/disable periodic sync, one-shot enqueue, status refresh (Android-only guards).
+  - `mobile-rn/src/config/api.ts` mirrors a successfully resolved API base URL to native (`mirrorNativeApiBaseUrl`) so the worker hits the same host as JS.
+  - `mobile-rn/src/services/usageSyncService.ts` mirrors again after a successful foreground sync + `confirmSync`; copies `userId` to native for POST bodies.
+  - `mobile-rn/src/screens/TrackingScreen.tsx` — Android section for interval, toggle, one-shot trigger, last worker run summary from prefs.
+- **WorkManager startup:** default initialization via AndroidX Startup (no custom `WorkManagerInitializer` unless needed).
+- **Manifest:** no extra permissions beyond existing **`INTERNET`** for this feature; WorkManager uses internal components (no app-declared foreground service for this path).
+
+**Pragmatic device testing (G3):** prefer forcing the periodic job instead of waiting 15+ minutes, e.g. after `adb shell am force-stop com.mobilern`, locate the WorkManager job with `adb shell dumpsys jobscheduler | grep -A 2 com.mobilern`, then `adb shell cmd jobscheduler run -f com.mobilern <jobId>`. If `cmd jobscheduler run` does not fire the worker on a given OS build, fall back to waiting one interval once and note the limitation in the Phase report.
+
+**Risks / future bug seeds (Phase 5 note):** `POST /api/usage/events` validation (`backend/src/validators/usageValidators.js`) requires **`userId` in camelCase** in the JSON body — native worker payloads must stay aligned; snake_case `user_id` will fail validation (not a Phase 1 regression; Phase 2.2 alignment only).
 

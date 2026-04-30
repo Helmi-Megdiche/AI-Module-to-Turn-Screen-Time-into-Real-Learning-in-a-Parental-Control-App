@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import {mirrorNativeApiBaseUrl} from '../services/usageTrackingService';
+
 const STORAGE_KEY_OVERRIDE = 'api_base_url_override';
 const STORAGE_KEY_LAST_GOOD = 'api_base_url_last_good';
 const PROBE_TIMEOUT_MS = 1800;
@@ -52,6 +54,7 @@ async function resolveByCandidates(candidates: string[]): Promise<string> {
     console.log('RN_API_DETECT selected', candidate);
     await AsyncStorage.setItem(STORAGE_KEY_LAST_GOOD, candidate);
     resolvedApiBaseUrl = candidate;
+    await mirrorNativeApiBaseUrl(candidate);
     return candidate;
   }
   throw new Error(
@@ -74,6 +77,7 @@ export async function getApiBaseUrl(): Promise<string> {
       console.log('RN_API_DETECT selected override', override);
       resolvedApiBaseUrl = override;
       await AsyncStorage.setItem(STORAGE_KEY_LAST_GOOD, override);
+      await mirrorNativeApiBaseUrl(override);
       return override;
     }
   }

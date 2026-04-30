@@ -1,5 +1,5 @@
- /**
- * @format
+/**
+    * @format
  */
 
 import 'react-native';

@@ -1,5 +1,10 @@
 import {getApiBaseUrl} from '../config/api';
-import {confirmSync, getUsageEvents} from './usageTrackingService';
+import {
+  confirmSync,
+  getUsageEvents,
+  mirrorNativeApiBaseUrl,
+  setSyncUserIdNative,
+} from './usageTrackingService';
 
 function assertValidUserId(userId: number): void {
   if (!Number.isInteger(userId) || userId <= 0) {
@@ -13,6 +18,8 @@ export async function syncUsageEvents(userId: number): Promise<{
   apiBaseUrl: string;
 }> {
   assertValidUserId(userId);
+
+  await setSyncUserIdNative(userId);
 
   const {events, nextCursor} = await getUsageEvents();
   const apiBaseUrl = await getApiBaseUrl();
@@ -36,5 +43,6 @@ export async function syncUsageEvents(userId: number): Promise<{
   }
 
   await confirmSync(nextCursor);
+  await mirrorNativeApiBaseUrl(apiBaseUrl);
   return {uploaded: boundedEvents.length, skipped: false, apiBaseUrl};
 }
