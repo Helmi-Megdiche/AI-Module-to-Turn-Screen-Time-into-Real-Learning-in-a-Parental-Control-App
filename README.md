@@ -881,3 +881,33 @@ Stable fields for integrators (demo, Flutter, parent app):
 - Demo UI: `demo/index.html`
 - Test runner: `scripts/run-all-tests.js`
 
+## 15) React Native Android Usage Tracking (Phase 1)
+
+Phase 1 adds a React Native Android client under `mobile-rn/` for app-usage ingestion with strict backend contract compatibility.
+
+- Android native bridge uses Java (`UsageStatsManager`) in:
+  - `mobile-rn/android/app/src/main/java/com/mobilern/usage/UsageTrackingModule.java`
+  - `mobile-rn/android/app/src/main/java/com/mobilern/usage/UsageTrackingPackage.java`
+- Module methods:
+  - `startTracking`, `stopTracking`, `getUsageEvents`, `confirmSync`, `openUsageAccessSettings`
+- Cursor-safe sync semantics:
+  - `getUsageEvents` returns `events` + `nextCursor` without auto-advancing cursor
+  - `confirmSync` applies monotonic update (`max(saved, incoming)`) only after successful upload
+- Backend upload contract preserved:
+  - `POST /api/usage/events` with top-level `userId` and snake_case event fields (`event_type`, `app_package`, `started_at`, `ended_at`, `duration_sec`)
+- JS services:
+  - `mobile-rn/src/services/usageTrackingService.ts`
+  - `mobile-rn/src/services/usageSyncService.ts`
+- API auto-discovery:
+  - `mobile-rn/src/config/api.ts` resolves URL by probing in priority order (last-known-good, `localhost`, `10.0.2.2`, LAN candidates)
+  - supports manual reset/re-detect from `TrackingScreen`
+- UI/manual validation screen:
+  - `mobile-rn/src/screens/TrackingScreen.tsx`
+  - exposes Start/Stop/Sync/Open Settings/Re-detect actions and sync status diagnostics
+
+Limitations (Phase 1 scope):
+
+- `started_at` is approximated from `UsageStats.lastTimeUsed` (not a true session start)
+- no screenshot/MediaProjection
+- no WorkManager/foreground service
+
