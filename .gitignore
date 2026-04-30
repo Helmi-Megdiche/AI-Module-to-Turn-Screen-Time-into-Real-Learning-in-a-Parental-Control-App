@@ -1,1 +1,7 @@
 node_modules/
+mobile-rn/node_modules/
+mobile-rn/android/build/
+mobile-rn/android/.gradle/
+mobile-rn/ios/Pods/
+mobile-rn/ios/build/
+mobile-rn/*.log
