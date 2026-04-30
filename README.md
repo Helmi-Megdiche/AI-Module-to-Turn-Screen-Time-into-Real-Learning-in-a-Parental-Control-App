@@ -911,3 +911,33 @@ Limitations (Phase 1 scope):
 - no screenshot/MediaProjection
 - no WorkManager/foreground service
 
+## 16) React Native Behavioral UI (Phase 2.1)
+
+Phase 2.1 extends the React Native client in `mobile-rn/` with behavioral analysis and current recommendation/mission views using existing backend contracts only.
+
+- New service layer: `mobile-rn/src/services/behavioralService.ts`
+  - `analyze(userId, { ageYears, windowDays? })` -> `POST /api/user/:id/behavioral/analyze`
+  - `getCurrentRecommendations(userId)` -> `GET /api/user/:id/recommendations/current`
+  - `getCurrentMissions(userId)` -> `GET /api/user/:id/missions/current`
+  - Reuses existing `getApiBaseUrl()` from `mobile-rn/src/config/api.ts` (no duplicate URL discovery logic)
+- New Wellbeing screen and components:
+  - `mobile-rn/src/screens/WellbeingScreen.tsx`
+  - `mobile-rn/src/components/ScoresPanel.tsx`
+  - `mobile-rn/src/components/SubscoreList.tsx`
+  - `mobile-rn/src/components/RecommendationsList.tsx`
+  - `mobile-rn/src/components/MissionsList.tsx`
+- App navigation update:
+  - `mobile-rn/App.tsx` now provides minimal screen switching between Tracking and Wellbeing views
+- Locked behavioral response mapping in UI:
+  - Reads `score.addictionScore`, `score.wellbeingScore`
+  - Reads `score.subscoresJson.addiction` and `score.subscoresJson.wellbeing`
+  - Renders current `recommendations[]` and `missions[]`
+- Client-side guards:
+  - Analyze validation enforces `ageYears` integer range `2..25`
+  - Optional `windowDays` validated in range `7..30`
+  - Analyze button is blocked on invalid input to avoid backend `validation_error`
+- Diagnostic logging:
+  - `RN_BEHAVIOR` logs for request start/success/failure, HTTP statuses, validation blocks, list key warnings, and subscore shape warnings
+
+Phase 2.1 keeps Phase 1 sync semantics untouched and introduces no backend, AI, screenshot, or background-worker changes.
+
