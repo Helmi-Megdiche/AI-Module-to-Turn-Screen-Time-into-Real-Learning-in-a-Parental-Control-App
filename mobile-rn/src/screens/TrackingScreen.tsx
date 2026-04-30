@@ -1,6 +1,7 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   Button,
+  PermissionsAndroid,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -25,10 +26,22 @@ import {
   refreshScheduledSyncStatus,
   requestImmediateBackgroundSync,
 } from '../services/backgroundSyncService';
+import {
+  captureScreenshotFrame,
+  getScreenshotStatus,
+  isScreenshotNativeAvailable,
+  onProjectionStopped,
+  requestProjectionConsent,
+  startScreenshotCapture,
+  stopScreenshotCapture,
+  type ScreenshotStatus,
+} from '../services/screenshotService';
 
 const DEFAULT_USER_ID = 1;
 
 export default function TrackingScreen(): React.JSX.Element {
+  const screenshotAvailable =
+    Platform.OS === 'android' && isScreenshotNativeAvailable();
   const [status, setStatus] = useState('Idle');
   const [lastSync, setLastSync] = useState<string>('Never');
   const [lastError, setLastError] = useState<string>('');
@@ -38,6 +51,10 @@ export default function TrackingScreen(): React.JSX.Element {
     null,
   );
   const [bgUiError, setBgUiError] = useState<string>('');
+  const [screenshotStatus, setScreenshotStatus] =
+    useState<ScreenshotStatus | null>(null);
+  const [screenshotError, setScreenshotError] = useState<string>('');
+  const [lastFrameInfo, setLastFrameInfo] = useState<string>('None');
 
   const statusColor = useMemo(() => {
     if (lastError) {
@@ -79,7 +96,37 @@ export default function TrackingScreen(): React.JSX.Element {
     }
     setSyncUserIdNative(DEFAULT_USER_ID).catch(() => undefined);
     refreshBgSchedule().catch(() => undefined);
+    if (isScreenshotNativeAvailable()) {
+      getScreenshotStatus()
+        .then(setScreenshotStatus)
+        .catch(() => undefined);
+    }
   }, []);
+
+  const refreshScreenshotStatus = useCallback(async () => {
+    if (!screenshotAvailable) {
+      return;
+    }
+    try {
+      const statusRes = await getScreenshotStatus();
+      setScreenshotStatus(statusRes);
+    } catch (error: any) {
+      setScreenshotError(error?.message ?? 'Screenshot status failed');
+    }
+  }, [screenshotAvailable]);
+
+  useEffect(() => {
+    if (!screenshotAvailable) {
+      return;
+    }
+    const sub = onProjectionStopped(() => {
+      setStatus('Projection stopped by system');
+      refreshScreenshotStatus().catch(() => undefined);
+    });
+    return () => {
+      sub.remove();
+    };
+  }, [refreshScreenshotStatus, screenshotAvailable]);
 
   const runStartTracking = async () => {
     try {
@@ -234,6 +281,142 @@ export default function TrackingScreen(): React.JSX.Element {
               </View>
             ) : null}
             {bgUiError ? <Text style={styles.error}>{bgUiError}</Text> : null}
+          </View>
+        ) : null}
+
+        {Platform.OS === 'android' ? (
+          <View style={styles.actions}>
+            <Text style={styles.panelTitle}>
+              Screenshot capture (MediaProjection)
+            </Text>
+            {!screenshotAvailable ? (
+              <Text style={styles.error}>
+                Native screenshot module unavailable in this installed build.
+                Reinstall the app after native changes.
+              </Text>
+            ) : null}
+            <Text style={styles.meta}>
+              Logs: RN_SCREENSHOT consent_granted / frame_captured /
+              frame_failed
+            </Text>
+            <Text style={styles.meta}>
+              G5 lock: capture is paused while app is in background.
+            </Text>
+            <Text style={styles.meta}>
+              Retry policy: max {screenshotStatus?.maxCaptureRetries ?? 3}{' '}
+              attempts, {screenshotStatus?.retryDelayMs ?? 200}ms backoff.
+            </Text>
+            <Button
+              title="Request projection consent"
+              disabled={!screenshotAvailable}
+              onPress={async () => {
+                try {
+                  setScreenshotError('');
+                  const result = await requestProjectionConsent();
+                  setStatus(
+                    result.granted
+                      ? 'Projection consent granted'
+                      : `Projection consent denied (${result.reason})`,
+                  );
+                  await refreshScreenshotStatus();
+                } catch (error: any) {
+                  setScreenshotError(
+                    error?.message ?? 'Projection consent request failed',
+                  );
+                }
+              }}
+            />
+            <View style={styles.spacer} />
+            <Button
+              title="Start screenshot capture"
+              disabled={!screenshotAvailable}
+              onPress={async () => {
+                try {
+                  setScreenshotError('');
+                  if (Platform.OS === 'android' && Platform.Version >= 33) {
+                    await PermissionsAndroid.request(
+                      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+                    );
+                  }
+                  await startScreenshotCapture();
+                  setStatus('Screenshot capture started');
+                  await refreshScreenshotStatus();
+                } catch (error: any) {
+                  setScreenshotError(
+                    error?.message ?? 'Failed to start capture',
+                  );
+                }
+              }}
+            />
+            <View style={styles.spacer} />
+            <Button
+              title="Capture frame now"
+              disabled={!screenshotAvailable}
+              onPress={async () => {
+                try {
+                  setScreenshotError('');
+                  const frame = await captureScreenshotFrame();
+                  const size = frame.byteSize ?? frame.bytesBase64?.length ?? 0;
+                  setLastFrameInfo(
+                    `${frame.format} ${frame.width}x${frame.height} bytes=${size}`,
+                  );
+                  setStatus('Screenshot frame captured');
+                  await refreshScreenshotStatus();
+                } catch (error: any) {
+                  setScreenshotError(error?.message ?? 'Frame capture failed');
+                }
+              }}
+            />
+            <View style={styles.spacer} />
+            <Button
+              title="Stop screenshot capture"
+              disabled={!screenshotAvailable}
+              onPress={async () => {
+                try {
+                  setScreenshotError('');
+                  await stopScreenshotCapture();
+                  setStatus('Screenshot capture stopped');
+                  await refreshScreenshotStatus();
+                } catch (error: any) {
+                  setScreenshotError(
+                    error?.message ?? 'Failed to stop capture',
+                  );
+                }
+              }}
+            />
+            <View style={styles.spacer} />
+            <Button
+              title="Refresh screenshot status"
+              disabled={!screenshotAvailable}
+              onPress={refreshScreenshotStatus}
+            />
+            {screenshotStatus ? (
+              <View style={styles.spacer}>
+                <Text style={styles.meta}>
+                  consentGranted: {String(!!screenshotStatus.consentGranted)}
+                </Text>
+                <Text style={styles.meta}>
+                  enabled: {String(!!screenshotStatus.enabled)}
+                </Text>
+                <Text style={styles.meta}>
+                  capturing: {String(!!screenshotStatus.capturing)}
+                </Text>
+                <Text style={styles.meta}>
+                  pausedInBackground:{' '}
+                  {String(!!screenshotStatus.pausedInBackground)}
+                </Text>
+                <Text style={styles.meta}>
+                  lastCaptureAt: {screenshotStatus.lastCaptureAt || '—'}
+                </Text>
+                <Text style={styles.meta}>
+                  lastError: {screenshotStatus.lastError || '—'}
+                </Text>
+              </View>
+            ) : null}
+            <Text style={styles.meta}>Last frame: {lastFrameInfo}</Text>
+            {screenshotError ? (
+              <Text style={styles.error}>{screenshotError}</Text>
+            ) : null}
           </View>
         ) : null}
 

@@ -964,3 +964,27 @@ Phase 2.2 adds **Android-only** periodic usage upload via **WorkManager** (`andr
 
 **Risks / future bug seeds (Phase 5 note):** `POST /api/usage/events` validation (`backend/src/validators/usageValidators.js`) requires **`userId` in camelCase** in the JSON body — native worker payloads must stay aligned; snake_case `user_id` will fail validation (not a Phase 1 regression; Phase 2.2 alignment only).
 
+## 18) React Native screenshot capture baseline (Phase 2.3)
+
+Phase 2.3 introduces a first Android MediaProjection integration path in `mobile-rn/`, focused on explicit consent, foreground-service compliance, single-frame capture, and diagnostic visibility.
+
+- **Native package:** `mobile-rn/android/app/src/main/java/com/mobilern/screenshot/`
+  - `ScreenshotModule.java` (RN bridge): `requestProjectionConsent`, `startCapture`, `captureFrame`, `stopCapture`, `getStatus`.
+  - `ScreenshotCaptureService.java` (foreground notification lifecycle for media projection sessions).
+  - `ScreenshotPackage.java` (manual RN package registration).
+- **Manifest additions** (`mobile-rn/android/app/src/main/AndroidManifest.xml`):
+  - `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PROJECTION`, `POST_NOTIFICATIONS`.
+  - screenshot service declaration with `android:foregroundServiceType="mediaProjection"`.
+- **JS service wrapper:** `mobile-rn/src/services/screenshotService.ts`
+  - Android-only guard rails around native bridge calls.
+  - Structured status and capture response mapping.
+  - Log tag consistency (`RN_SCREENSHOT`).
+- **UI surface:** `mobile-rn/src/screens/TrackingScreen.tsx`
+  - parent-facing controls for consent, start, one-shot frame capture, stop, and status refresh.
+  - captures and displays frame metadata (format/dimensions/size) for runtime gate verification.
+- **Locked behavior for G5:** capture is paused while app is backgrounded.
+- **Retry/backoff policy:** frame capture retries up to 3 attempts with 200 ms delay and explicit retry/failure logs.
+- **Android 14/15 projection lifecycle fix:** capture now uses one persistent `VirtualDisplay` + `ImageReader` per consent session (created once at start), and `captureFrame()` consumes buffered latest images instead of recreating `createVirtualDisplay()` per frame.
+
+This phase keeps backend/AI contracts unchanged and does not modify Phase 1/2.1/2.2 usage-event sync flows.
+
