@@ -5,3 +5,6 @@ mobile-rn/android/.gradle/
 mobile-rn/ios/Pods/
 mobile-rn/ios/build/
 mobile-rn/*.log
+mobile-rn/.bundle/
+mobile-rn/android/app/debug.keystore
+android-app/packages/media_projection_screenshot/android/.gradle/
